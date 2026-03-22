@@ -508,7 +508,7 @@ export default function AdminPage() {
                 <span className="text-lg">🤖</span> Otomatik Tespit
               </strong>
               <p className="mt-1 text-indigo-200/80">
-                Bu turnuvada <strong>{scrapePreview.inferredBreakCount}</strong> takımın break yaptığı algılandı ve ELO hesaplamasına dahil edilecektir. Eğer bu sayı yanlışsa, yukarıdaki <strong>Break Sayısı</strong> kutucuğuna manuel olarak doğru sayıyı girip doğrudan ELO'ları Hesapla butonuna basabilirsiniz.
+                Bu turnuvada <strong>{scrapePreview.inferredBreakCount}</strong> takımın break yaptığı algılandı ve ELO hesaplamasına dahil edilecektir. Eğer bu sayı yanlışsa, yukarıdaki <strong>Break Sayısı</strong> kutucuğuna manuel olarak doğru sayıyı girip doğrudan ELO&apos;ları Hesapla butonuna basabilirsiniz.
               </p>
             </div>
           )}
