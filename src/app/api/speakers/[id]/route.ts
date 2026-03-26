@@ -28,13 +28,13 @@ export async function GET(
     // H2H as winner
     const { data: h2hWins } = await supabase
       .from("h2h_records")
-      .select("*, loser:speakers!h2h_records_loser_id_fkey(name)")
+      .select("*, loser:speakers!h2h_records_loser_id_fkey(name), tournaments(name)")
       .eq("winner_id", id);
 
     // H2H as loser
     const { data: h2hLosses } = await supabase
       .from("h2h_records")
-      .select("*, winner:speakers!h2h_records_winner_id_fkey(name)")
+      .select("*, winner:speakers!h2h_records_winner_id_fkey(name), tournaments(name)")
       .eq("loser_id", id);
 
     // Tournament stats with partner info

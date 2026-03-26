@@ -7,7 +7,7 @@ export async function GET() {
       .from("speakers")
       .select("*")
       .order("elo", { ascending: false })
-      .limit(400);
+      .limit(600);
 
     if (error) throw error;
 

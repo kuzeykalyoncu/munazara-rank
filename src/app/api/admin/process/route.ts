@@ -7,7 +7,7 @@ interface ProcessInput {
   speakers: { name: string; totalPoints: number; scores: number[] }[];
   teams: { name: string; speakers: string[] }[];
   results: ScrapeResult["results"] & {
-    rooms: { placements: string[]; isOutround?: boolean }[];
+    rooms: { name?: string; placements: string[]; isOutround?: boolean }[];
   };
   warnings?: string[];
   breakCount?: string | number;
@@ -22,6 +22,7 @@ interface SpeakerState {
   totalTournaments: number;
   careerAvgSpeak: number;
   speakAvg: number;
+  milestones: string[];
 }
 
 // Classic ELO expected score formula
@@ -77,9 +78,19 @@ export async function POST(req: NextRequest) {
       if (!testErr) hasMatchCountCol = true;
     } catch (e) {}
 
+    let hasMilestonesCol = false;
+    try {
+      const { error: mErr } = await supabase.from("speakers").select("milestones").limit(1);
+      if (!mErr) hasMilestonesCol = true;
+    } catch(e) {}
+
     const speakerMap: Record<string, SpeakerState> = {};
     for (const sp of scraped) {
-      const selectQ = hasMatchCountCol ? "id, elo, match_count, total_tournaments, career_avg_speak" : "id, elo, total_tournaments, career_avg_speak";
+      let cols = ["id", "elo", "total_tournaments", "career_avg_speak"];
+      if (hasMatchCountCol) cols.push("match_count");
+      if (hasMilestonesCol) cols.push("milestones");
+      const selectQ = cols.join(", ");
+      
       const { data } = await supabase.from("speakers").select(selectQ).eq("name", sp.name).single();
       const existing: any = data;
       
@@ -96,7 +107,8 @@ export async function POST(req: NextRequest) {
           eloChange: 0,
           totalTournaments: existing.total_tournaments || 0,
           careerAvgSpeak: existing.career_avg_speak || 0,
-          speakAvg: speakAvg
+          speakAvg: speakAvg,
+          milestones: existing.milestones || []
         };
       } else {
         const insertObj: any = { name: sp.name, elo: 1000, total_tournaments: 0, career_avg_speak: 0 };
@@ -113,7 +125,8 @@ export async function POST(req: NextRequest) {
             eloChange: 0,
             totalTournaments: 0,
             careerAvgSpeak: 0,
-            speakAvg: speakAvg
+            speakAvg: speakAvg,
+            milestones: []
           };
         }
       }
@@ -140,7 +153,7 @@ export async function POST(req: NextRequest) {
     const speakerInroundCount: Record<string, number> = {};
     
     for (const room of results.rooms) {
-      const teamStates: { name: string, elo: number, k: number, speakers: SpeakerState[] }[] = [];
+      const teamStates: { name: string, elo: number, speakers: SpeakerState[] }[] = [];
       
       // room.placements is ordered 1st to Nth.
       for (const tName of room.placements) {
@@ -149,13 +162,12 @@ export async function POST(req: NextRequest) {
         if (sps.length === 0) continue;
         
         const eloAvg = sps.reduce((sum, s) => sum + s.elo, 0) / sps.length;
-        const kAvg = sps.reduce((sum, s) => sum + getKFactor(s.matchCount), 0) / sps.length;
-        teamStates.push({ name: tName, elo: eloAvg, k: kAvg, speakers: sps });
+        teamStates.push({ name: tName, elo: eloAvg, speakers: sps });
       }
 
       if (teamStates.length < 2) continue; // Invalid room
 
-      const teamDeltas = new Map<string, number>();
+      const teamRawDeltas = new Map<string, number>();
 
       // Pairwise matchups (1st beats 2nd, 3rd... 2nd beats 3rd...)
       for (let i = 0; i < teamStates.length; i++) {
@@ -163,42 +175,63 @@ export async function POST(req: NextRequest) {
           const tA = teamStates[i]; // Winner
           const tB = teamStates[j]; // Loser
           
+          let SA = 1;
+          let SB = 0;
+
+          if (room.isOutround && teamStates.length === 4) {
+            if (i < 2 && j < 2) {
+              SA = 0.5;
+              SB = 0.5;
+            } else if (i >= 2 && j >= 2) {
+              SA = 0.5;
+              SB = 0.5;
+            }
+          }
+
           const EA = expectedScore(tA.elo, tB.elo);
           const EB = expectedScore(tB.elo, tA.elo);
           
-          const deltaA = tA.k * (1 - EA);
-          const deltaB = tB.k * (0 - EB); // Loser gets 0 - Expected
+          const rawDeltaA = (SA - EA);
+          const rawDeltaB = (SB - EB);
           
-          teamDeltas.set(tA.name, (teamDeltas.get(tA.name) || 0) + deltaA);
-          teamDeltas.set(tB.name, (teamDeltas.get(tB.name) || 0) + deltaB);
+          teamRawDeltas.set(tA.name, (teamRawDeltas.get(tA.name) || 0) + rawDeltaA);
+          teamRawDeltas.set(tB.name, (teamRawDeltas.get(tB.name) || 0) + rawDeltaB);
 
           if (tA.speakers.length > 0 && tB.speakers.length > 0) {
              teamH2HRecords.push({
                 winner_id: tA.speakers[0].id,
                 loser_id: tB.speakers[0].id,
                 tournament_id: tournamentId,
+                round_name: room.name, // Added for detailed H2H
                 round_count: 1
              });
+
           }
         }
       }
 
       // Distribute Deltas and increment Match Count
       for (const t of teamStates) {
-         const dT = teamDeltas.get(t.name) || 0;
-         const pool = t.speakers.length * dT; // Total pool is 2 * Delta for a duo
+         const rawDelta = teamRawDeltas.get(t.name) || 0;
          
          if (t.speakers.length === 1) {
            const s = t.speakers[0];
            if (!room.isOutround) {
              speakerInroundCount[s.name] = (speakerInroundCount[s.name] || 0) + 1;
            }
-           s.elo += pool;
-           s.eloChange += pool;
+           const personalK = getKFactor(s.matchCount);
+           const change = personalK * rawDelta * 2;
+           
+           s.elo += change;
+           s.eloChange += change;
            s.matchCount += 1;
          } else if (t.speakers.length >= 2) {
            const s1 = t.speakers[0];
            const s2 = t.speakers[1];
+           
+           const k1 = getKFactor(s1.matchCount);
+           const k2 = getKFactor(s2.matchCount);
+           
            s1.matchCount += 1;
            s2.matchCount += 1;
            
@@ -217,37 +250,64 @@ export async function POST(req: NextRequest) {
              sp2 = orig2?.scores[r2Idx] || 0;
            }
 
-           if (pool > 0) {
-             const sum = s1.elo + s2.elo; 
-             const diff = Math.abs(sp1 - sp2);
-             
-             let share1, share2;
-             if (!room.isOutround && diff > 1) {
-               // Durum 2: Fark 1'den büyükse - Performans Ödülü (Direct proportion)
-               share1 = sum > 0 ? pool * (s1.elo / sum) : pool / 2;
-               share2 = sum > 0 ? pool * (s2.elo / sum) : pool / 2;
-             } else {
-               // Durum 1: Fark 0 veya 1 ise veya Outround ise - Gelişim Ödülü (Inverse proportion)
-               share1 = sum > 0 ? pool * (s2.elo / sum) : pool / 2;
-               share2 = sum > 0 ? pool * (s1.elo / sum) : pool / 2;
-             }
-             
-             s1.elo += share1;
-             s2.elo += share2;
-             s1.eloChange += share1;
-             s2.eloChange += share2;
-           } else if (pool < 0) {
-             // Kayıp Durumu: Taşıyamama Cezası (Direct proportion)
-             const sum = s1.elo + s2.elo;
-             const share1 = sum > 0 ? pool * (s1.elo / sum) : pool / 2;
-             const share2 = sum > 0 ? pool * (s2.elo / sum) : pool / 2;
-             s1.elo += share1;
-             s2.elo += share2;
-             s1.eloChange += share1;
-             s2.eloChange += share2;
+           const sumElo = s1.elo + s2.elo; 
+           const diff = Math.abs(sp1 - sp2);
+           
+           let mult1 = 0.5;
+           let mult2 = 0.5;
+
+           if (rawDelta > 0) {
+              if (!room.isOutround && diff > 1) {
+                // Durum 2: Fark 1'den büyükse - Performans Ödülü (Direct proportion)
+                mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
+                mult2 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
+              } else {
+                // Durum 1: Fark 0 veya 1 ise veya Outround ise - Gelişim Ödülü (Inverse proportion)
+                mult1 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
+                mult2 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
+              }
+           } else if (rawDelta < 0) {
+              // Kayıp Durumu: Taşıyamama Cezası (Direct proportion)
+              mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
+              mult2 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
            }
+           
+           // A_Degisimi = K_A * (Gercek_Skor - E_Takim) * Performans_Carpani * 2
+           const share1 = k1 * rawDelta * mult1 * 2;
+           const share2 = k2 * rawDelta * mult2 * 2;
+           
+           s1.elo += share1;
+           s2.elo += share2;
+           s1.eloChange += share1;
+           s2.eloChange += share2;
          }
       }
+
+      // 3.5 Milestones (No extra Elo bonuses here per user request)
+      if (room.isOutround) {
+        const rName = room.name?.toLowerCase() || "";
+        let stageName = "Outround";
+        if (rName.includes("final") && !rName.includes("yarı") && !rName.includes("çeyrek") && !rName.includes("octo")) {
+          stageName = "Finalist";
+        } else if (rName.includes("yarı") || rName.includes("semi")) {
+          stageName = "Yarı Finalist";
+        } else if (rName.includes("çeyrek") || rName.includes("quarter")) {
+          stageName = "Çeyrek Finalist";
+        } else if (rName.includes("octo") || rName.includes("sekiz")) {
+          stageName = "Octofinalist";
+        }
+
+        for (let i = 0; i < teamStates.length; i++) {
+          const tA = teamStates[i];
+          for (const s of tA.speakers) {
+            const ms = `${tournamentId} - ${stageName}`;
+            if (!s.milestones.includes(ms)) s.milestones.push(ms);
+          }
+        }
+      }
+
+
+
     }
 
     // Dynamic Break Override
@@ -257,44 +317,20 @@ export async function POST(req: NextRequest) {
       results.breaks = topTeams;
     }
 
-    // 4. Tournament Achievements & Base Distribution (Static Boosts)
+    // 4. Tournament Break Application
     const breakSet = new Set(results.breaks.map((n) => n.toLowerCase()));
     const finalSet = new Set(results.finalists.map((n) => n.toLowerCase()));
     const championSet = new Set(results.champions.map((n) => n.toLowerCase()));
     const bestSpeakerSet = new Set(results.bestSpeakers.map((n) => n.toLowerCase()));
 
-    for (const team of teams) {
-      let pool = 0;
-      const tName = team.name.toLowerCase();
-      const didBreak = [...breakSet].some((b) => tName.includes(b) || b.includes(tName));
-      const didFinal = [...finalSet].some((f) => tName.includes(f) || f.includes(tName));
-      const didChamp = [...championSet].some((c) => tName.includes(c) || c.includes(tName));
-
-      if (didChamp) pool += 150;
-      else if (didFinal) pool += 75;
-      else if (didBreak) pool += 25;
+    for (const spName of Object.keys(speakerMap)) {
+      const speaker = speakerMap[spName];
+      const teamName = speakerTeamMap[spName] || "";
+      const didBreak = [...breakSet].some((b) => teamName.includes(b) || b.includes(teamName));
       
-      // Base participation
-      pool += 10;
-      
-      if (pool === 0) continue;
-      
-      const sps = team.speakers.map(n => speakerMap[n]).filter(Boolean);
-      const totalPool = sps.length * pool;
-
-      if (sps.length === 1) {
-        sps[0].elo += totalPool;
-        sps[0].eloChange += totalPool;
-      } else if (sps.length >= 2) {
-        const s1 = sps[0];
-        const s2 = sps[1];
-        const sum = s1.elo + s2.elo;
-        const share1 = sum > 0 ? totalPool * (s2.elo / sum) : totalPool / 2;
-        const share2 = sum > 0 ? totalPool * (s1.elo / sum) : totalPool / 2;
-        s1.elo += share1;
-        s2.elo += share2;
-        s1.eloChange += share1;
-        s2.eloChange += share2;
+      if (didBreak) {
+        speaker.elo += 5;
+        speaker.eloChange += 5;
       }
     }
 

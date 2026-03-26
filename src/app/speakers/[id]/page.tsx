@@ -30,8 +30,8 @@ interface SpeakerProfile {
     recorded_at: string;
     tournaments: { name: string; base_url: string } | null;
   }[];
-  h2hWins: { id: string; loser: { name: string } | null; round_count: number; tournament_id: string }[];
-  h2hLosses: { id: string; winner: { name: string } | null; round_count: number; tournament_id: string }[];
+  h2hWins: { id: string; loser: { name: string } | null; round_count: number; tournament_id: string; round_name?: string; tournaments: { name: string } | null }[];
+  h2hLosses: { id: string; winner: { name: string } | null; round_count: number; tournament_id: string; round_name?: string; tournaments: { name: string } | null }[];
   tournamentStats: {
     id: string;
     speak_avg: number;
@@ -132,21 +132,32 @@ export default function SpeakerProfilePage() {
   }
 
   // Aggregate H2H
-  const h2hMap: Record<string, { name: string; wins: number; losses: number }> = {};
+  const h2hMap: Record<string, { name: string; wins: number; losses: number; matches: any[] }> = {};
   for (const w of h2hWins) {
     const name = w.loser?.name ?? "Bilinmiyor";
-    if (!h2hMap[name]) h2hMap[name] = { name, wins: 0, losses: 0 };
+    if (!h2hMap[name]) h2hMap[name] = { name, wins: 0, losses: 0, matches: [] };
     h2hMap[name].wins += w.round_count;
+    h2hMap[name].matches.push({ 
+        tournament: w.tournaments?.name || "Bilinmeyen Turnuva", 
+        round: w.round_name || "Bilinmeyen Tur",
+        result: "Galibiyet" 
+    });
   }
   for (const l of h2hLosses) {
     const name = l.winner?.name ?? "Bilinmiyor";
-    if (!h2hMap[name]) h2hMap[name] = { name, wins: 0, losses: 0 };
+    if (!h2hMap[name]) h2hMap[name] = { name, wins: 0, losses: 0, matches: [] };
     h2hMap[name].losses += l.round_count;
+    h2hMap[name].matches.push({ 
+        tournament: l.tournaments?.name || "Bilinmeyen Turnuva", 
+        round: l.round_name || "Bilinmeyen Tur",
+        result: "Mağlubiyet" 
+    });
   }
   const h2hList = Object.values(h2hMap).sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses));
 
   const initials = speaker.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
   const totalH2H = h2hWins.reduce((a, w) => a + w.round_count, 0) + h2hLosses.reduce((a, l) => a + l.round_count, 0);
+
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
@@ -236,33 +247,52 @@ export default function SpeakerProfilePage() {
           <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <span>⚔️</span> Head-to-Head Kayıtları
           </h2>
-          <div className="space-y-2">
+          <div className="space-y-4">
             {h2hList.map((record, i) => {
               const total = record.wins + record.losses;
               const winPct = total > 0 ? (record.wins / total) * 100 : 0;
               return (
-                <div key={i} className="flex items-center gap-4 bg-white/3 rounded-xl px-4 py-3">
-                  <div className="flex-1 font-medium text-white truncate">{record.name}</div>
-                  <div className="flex items-center gap-2 text-sm shrink-0">
-                    <span className="text-green-400 font-bold">{record.wins}G</span>
-                    <span className="text-gray-600">/</span>
-                    <span className="text-red-400 font-bold">{record.losses}M</span>
-                  </div>
-                  <div className="w-24 hidden sm:block">
-                    <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all"
-                        style={{ width: `${winPct}%` }}
-                      />
+                <div key={i} className="bg-white/3 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1 font-bold text-white truncate">{record.name}</div>
+                    <div className="flex items-center gap-2 text-sm shrink-0">
+                      <span className="text-green-400 font-bold">{record.wins}G</span>
+                      <span className="text-gray-600">/</span>
+                      <span className="text-red-400 font-bold">{record.losses}M</span>
+                    </div>
+                    <div className="w-24 hidden sm:block">
+                      <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all"
+                          style={{ width: `${winPct}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className={`text-xs font-mono w-10 text-right ${winPct >= 50 ? "text-green-400" : "text-red-400"}`}>
+                      {winPct.toFixed(0)}%
                     </div>
                   </div>
-                  <div className={`text-xs font-mono w-10 text-right ${winPct >= 50 ? "text-green-400" : "text-red-400"}`}>
-                    {winPct.toFixed(0)}%
+                  
+                  {/* Detailed Matches */}
+                  <div className="pt-2 border-t border-white/5 space-y-1">
+                    {record.matches.map((m, idx) => (
+                      <div key={idx} className="flex justify-between text-[11px] text-gray-500">
+                        <div className="truncate flex-1 pr-2">
+                           <span className="text-gray-400">{m.tournament}</span>
+                           <span className="mx-1 opacity-30">•</span>
+                           <span>{m.round}</span>
+                        </div>
+                        <div className={m.result === "Galibiyet" ? "text-green-500/70" : "text-red-500/70"}>
+                          {m.result}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
             })}
           </div>
+
         </div>
       )}
 

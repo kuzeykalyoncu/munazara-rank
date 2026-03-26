@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Tournament } from "@/lib/supabase";
 
+export type AliasItem = { name: string; tournaments: number };
+export type AliasCluster = { id: string; items: AliasItem[] };
+
 function EloTag({ elo }: { elo: number }) {
   let color = "text-gray-400 border-gray-600";
   if (elo >= 1200) color = "text-violet-400 border-violet-500 bg-violet-500/10";
@@ -45,8 +48,11 @@ export default function AdminPage() {
   const [aliases, setAliases] = useState<any[]>([]);
   const [aliasSource, setAliasSource] = useState("");
   const [aliasTarget, setAliasTarget] = useState("");
-  const [aliasSuggestions, setAliasSuggestions] = useState<[string, string][]>([]);
   const [aliasLoading, setAliasLoading] = useState(false);
+
+  const [aliasClusters, setAliasClusters] = useState<AliasCluster[]>([]);
+  const [mergeSelections, setMergeSelections] = useState<Record<string, { main: string, subs: string[] }>>({});
+  const [isMerging, setIsMerging] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -115,50 +121,73 @@ export default function AdminPage() {
     setAuthed(false);
   }
 
-  function getLevenshteinDistance(a: string, b: string) {
-    const matrix = [];
-    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-    for (let i = 1; i <= b.length; i++) {
-      for (let j = 1; j <= a.length; j++) {
-        if (b.charAt(i - 1) === a.charAt(j - 1)) {
-          matrix[i][j] = matrix[i - 1][j - 1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j - 1] + 1,
-            Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
-          );
-        }
-      }
-    }
-    return matrix[b.length][a.length];
-  }
-
   async function findPotentialAliases() {
     setAliasLoading(true);
-    setAliasSuggestions([]);
+    setAliasClusters([]);
+    setMergeSelections({});
     try {
-      const res = await fetch("/api/leaderboard");
-      const { speakers } = await res.json();
-      if (!speakers) return;
+      const res = await fetch("/api/admin/aliases/suggestions");
+      const { clusters } = await res.json();
+      setAliasClusters(clusters || []);
       
-      const suggestions: [string, string][] = [];
-      const names = speakers.map((s: any) => s.name);
-      
-      for (let i = 0; i < names.length; i++) {
-        for (let j = i + 1; j < names.length; j++) {
-           const dist = getLevenshteinDistance(names[i].toLowerCase(), names[j].toLowerCase());
-           const isSub = names[i].toLowerCase().includes(names[j].toLowerCase()) || names[j].toLowerCase().includes(names[i].toLowerCase());
-           if (dist <= 3 || isSub) {
-              if (names[i].toLowerCase() !== names[j].toLowerCase()) {
-                 suggestions.push([names[i], names[j]]);
-              }
-           }
+      const initial: Record<string, { main: string, subs: string[] }> = {};
+      (clusters || []).forEach((c: AliasCluster) => {
+        if (c.items.length > 0) {
+           const main = c.items[0].name;
+           const subs = c.items.slice(1).map((i) => i.name);
+           initial[c.id] = { main, subs };
         }
-      }
-      setAliasSuggestions(suggestions);
+      });
+      setMergeSelections(initial);
     } catch(e) { console.error(e); }
     finally { setAliasLoading(false); }
+  }
+
+  async function handleBulkMergeAndRecalculate() {
+    if (!confirm("Eşleşen isimler kaydedilip TÜM VERİTABANI sıfırlanacak ve baştan hesaplanacaktır. Onaylıyor musunuz?")) return;
+    
+    const payload: { source_name: string; target_name: string }[] = [];
+    Object.keys(mergeSelections).forEach(clusterId => {
+      const selection = mergeSelections[clusterId];
+      if (selection && selection.main && selection.subs.length > 0) {
+         selection.subs.forEach(sub => {
+            payload.push({ source_name: sub, target_name: selection.main });
+         });
+      }
+    });
+
+    if (payload.length === 0) {
+      alert("Seçilmiş veya birleştirilmiş isim yok!");
+      return;
+    }
+
+    setIsMerging(true);
+    try {
+      const res = await fetch("/api/admin/aliases/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error("İsimler kaydedilirken hata oluştu");
+
+      setStatus("İsimler kaydedildi. Veritabanı sıfırlanıyor...");
+      
+      const rRes = await fetch("/api/admin/reset", { method: "POST" });
+      if (!rRes.ok) throw new Error("Veritabanı sıfırlanamadı!");
+
+      await loadAliases();
+      
+      setStatus("Toplu senkronizasyon başlatılıyor...");
+      await handleBulkSync(false);
+
+    } catch (e: any) {
+      alert(e.message || "Toplu işlem hatası");
+    } finally {
+      setIsMerging(false);
+      setAliasClusters([]);
+      setStatus("Tüm entegrasyon tamamlandı!");
+      setTimeout(() => setStatus(""), 3000);
+    }
   }
 
   async function handleAddAlias(e: React.FormEvent) {
@@ -718,24 +747,77 @@ export default function AdminPage() {
           </button>
         </form>
 
-        {aliasSuggestions.length > 0 && (
+        {aliasClusters.length > 0 && (
           <div className="mb-6 bg-orange-500/5 border border-orange-500/20 rounded-xl p-4">
-             <h3 className="text-orange-300 text-sm font-medium mb-3">🤔 Bence Şunlar Aynı Kişi Olabilir:</h3>
-             <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                {aliasSuggestions.map((pair, idx) => (
-                   <div key={idx} className="flex items-center justify-between text-sm bg-black/20 rounded-lg p-2 border border-white/5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-gray-300">{pair[0]}</span>
-                        <span className="text-gray-500 text-xs">ile</span>
-                        <span className="text-gray-300">{pair[1]}</span>
-                      </div>
-                      <div className="flex gap-2 ml-4">
-                         <button onClick={() => { setAliasSource(pair[0]); setAliasTarget(pair[1]); }} className="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded hover:bg-indigo-500/30">1.yi 2.ye Çevir</button>
-                         <button onClick={() => { setAliasSource(pair[1]); setAliasTarget(pair[0]); }} className="text-xs bg-violet-500/20 text-violet-300 px-2 py-1 rounded hover:bg-violet-500/30">2.yi 1.ye Çevir</button>
-                      </div>
-                   </div>
-                ))}
+             <h3 className="text-orange-300 font-medium mb-3">🤔 Merge Dashboard (Aynı Olabilir)</h3>
+             <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 mb-4">
+                {aliasClusters.map((cluster) => {
+                   const sel = mergeSelections[cluster.id];
+                   if (!sel) return null;
+                   
+                   return (
+                     <div key={cluster.id} className="bg-black/40 rounded-lg p-4 border border-white/10 shadow-inner">
+                       <div className="text-xs text-orange-400 mb-3 uppercase tracking-wide font-bold">🎯 Hedef Olarak Seçilen (Ana İsim)</div>
+                       <div className="flex flex-col gap-2">
+                         {cluster.items.map((item, idx) => (
+                           <div key={idx} className={`flex items-center gap-3 p-2 rounded transition-colors ${sel.main === item.name ? 'bg-orange-500/10 border border-orange-500/30' : 'bg-white/5 border border-white/5 hover:bg-white/10'}`}>
+                             <input 
+                               type="radio" 
+                               name={`main-${cluster.id}`}
+                               checked={sel.main === item.name}
+                               onChange={() => {
+                                  const newSubs = cluster.items.filter((i) => i.name !== item.name).map((i) => i.name);
+                                  setMergeSelections((prev) => ({
+                                     ...prev,
+                                     [cluster.id]: { main: item.name, subs: newSubs }
+                                  }));
+                               }}
+                               className="w-4 h-4 text-orange-500 focus:ring-orange-500 bg-gray-700 border-gray-600"
+                             />
+                             <div className="flex-1 flex justify-between items-center">
+                               <span className={sel.main === item.name ? "text-orange-400 font-bold" : "text-gray-300"}>
+                                 {item.name}
+                               </span>
+                               <span className="text-xs px-2 py-0.5 rounded bg-white/10 text-gray-400 font-mono">
+                                 {item.tournaments} Turnuva
+                               </span>
+                             </div>
+                             {sel.main !== item.name && (
+                               <label className="flex items-center gap-2 ml-4 cursor-pointer">
+                                 <span className="text-xs text-gray-500">Birleştir:</span>
+                                 <input 
+                                   type="checkbox"
+                                   checked={sel.subs.includes(item.name)}
+                                   onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setMergeSelections((prev) => {
+                                         const currentSubs = prev[cluster.id].subs;
+                                         const newSubs = checked ? [...currentSubs, item.name] : currentSubs.filter((n) => n !== item.name);
+                                         return { ...prev, [cluster.id]: { main: sel.main, subs: newSubs } };
+                                      });
+                                   }}
+                                   className="w-5 h-5 text-indigo-500 focus:ring-indigo-500 bg-gray-700 border-gray-600 rounded"
+                                 />
+                               </label>
+                             )}
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                   );
+                })}
              </div>
+             <button
+               onClick={handleBulkMergeAndRecalculate}
+               disabled={isMerging}
+               className="w-full py-4 rounded-xl bg-gradient-to-r from-orange-600 to-red-600 text-white font-bold shadow-lg shadow-orange-500/20 hover:from-orange-500 hover:to-red-500 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-3 text-lg mt-2"
+             >
+               {isMerging ? (
+                 <span className="animate-pulse flex items-center gap-2">⏳ Veriler yeniden analiz ediliyor, lütfen bekleyin...</span>
+               ) : (
+                 <><span>🧨</span> Seçili İsimleri Eşleştir ve Sistemi Yeniden Hesapla</>
+               )}
+             </button>
           </div>
         )}
 
