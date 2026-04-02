@@ -144,7 +144,7 @@ export default function AdminPage() {
   }
 
   async function handleBulkMergeAndRecalculate() {
-    if (!confirm("Eşleşen isimler kaydedilip TÜM VERİTABANI sıfırlanacak ve baştan hesaplanacaktır. Onaylıyor musunuz?")) return;
+    if (!confirm("Eşleşen isimler kaydedilip TÜM HESAPLAMALAR sıfırlanacaktır. Kendi istediğiniz kronolojik sıraya göre yeniden analiz etmeniz gerekecektir. Onaylıyor musunuz?")) return;
     
     const payload: { source_name: string; target_name: string }[] = [];
     Object.keys(mergeSelections).forEach(clusterId => {
@@ -177,8 +177,8 @@ export default function AdminPage() {
 
       await loadAliases();
       
-      setStatus("Toplu senkronizasyon başlatılıyor...");
-      await handleBulkSync(false);
+      setStatus("İsimler başarıyla entegre edildi ve hesaplamalar sıfırlandı! Aşşağıdaki listeden turnuvaları sırasıyla analiz edebilirsiniz.");
+      loadTournaments();
 
     } catch (e: any) {
       alert(e.message || "Toplu işlem hatası");
@@ -354,23 +354,40 @@ export default function AdminPage() {
     loadTournaments();
   }
 
+  async function handleSingleSync(t: Tournament) {
+    setLoading(true);
+    setStatus(`🔄 Analiz ediliyor: ${t.name}`);
+    
+    const scraped = await handleScrape(undefined, t.base_url);
+    if (scraped) {
+      const processed = await handleProcess(scraped, scraped.tournamentId);
+      if (processed) {
+         setStatus(`✅ Başarıyla analiz edildi: ${t.name}`);
+         loadTournaments();
+      }
+    } else {
+      setLoading(false);
+    }
+  }
+
   async function handleResetDb() {
-    if (!confirm("DİKKAT! Tüm veritabanı silinecek ve veriler en baştan (tarihe göre) yeniden analiz edilecektir. Bu işlem geri alınamaz. Emin misiniz?")) return;
+    if (!confirm("DİKKAT! Tüm hesaplamalar (Elo, H2H, Turnuva geçmişi) sıfırlanacaktır. Turnuva linkleri sabit kalır. Emin misiniz?")) return;
     
     setLoading(true);
-    setStatus("⚠️ Veritabanı sıfırlanıyor...");
+    setStatus("⚠️ Hesaplamalar sıfırlanıyor...");
     try {
       const res = await fetch("/api/admin/reset", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       
-      setStatus("✅ Veritabanı başarıyla sıfırlandı. Toplu analiz başlatılıyor...");
-      await handleBulkSync(true);
+      setStatus("✅ Hesaplamalar başarıyla sıfırlandı. Aşağıdan turnuvaları KENDİ İSTEDİĞİNİZ TARİH SIRASIYLA yeniden analiz edebilirsiniz.");
+      loadTournaments();
     } catch (e: any) {
       setStatus("❌ İşlem hatası: " + e.message);
-      setLoading(false);
     }
+    setLoading(false);
   }
+
 
   async function handleDeleteAllData() {
     if (!confirm("DİKKAT! Tüm veritabanı SİLİNECEKTİR (Turnuvalar, Konuşmacılar, Geçmiş vs). Bu işlem geri alınamaz ve her şeye sıfırdan başlamanız gerekir. Emin misiniz?")) return;
@@ -641,7 +658,7 @@ export default function AdminPage() {
               disabled={loading || tournaments.length === 0}
               className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 text-sm font-semibold"
             >
-              <span>🧨</span> Sıfırla & Baştan Analiz Et
+              <span>🧨</span> Sadece Hesaplamaları Sıfırla
             </button>
             <button
               onClick={handleDeleteAllData}
@@ -686,6 +703,13 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handleSingleSync(t)}
+                    disabled={loading || t.status === "processed"}
+                    className="opacity-0 group-hover:opacity-100 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition text-xs font-semibold disabled:opacity-0 hidden sm:flex"
+                  >
+                    <span>▶️</span> Analiz Et
+                  </button>
                   <span
                     className={`text-xs px-2.5 py-1 rounded-full font-medium ${
                       t.status === "processed"
