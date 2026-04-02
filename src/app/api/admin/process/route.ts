@@ -17,12 +17,22 @@ interface SpeakerState {
   id: string;
   name: string;
   elo: number;
-  matchCount: number;
+  matchCount: number;       // K-Faktörü için: sadece salon (oda) sayısı
   eloChange: number;
   totalTournaments: number;
   careerAvgSpeak: number;
   speakAvg: number;
   milestones: string[];
+  // Break tracking
+  brCount: number;
+  brBonusTotal: number;
+  // Pairwise win/loss/tie (win_rate kaynağı)
+  pairwiseWins: number;
+  pairwiseLosses: number;
+  pairwiseTies: number;
+  // Prelim-only SP (Avg SP kaynağı)
+  prelimSpeakTotal: number;
+  prelimRoundCount: number;
 }
 
 // Classic ELO expected score formula
@@ -93,10 +103,6 @@ export async function POST(req: NextRequest) {
       
       const { data } = await supabase.from("speakers").select(selectQ).eq("name", sp.name).single();
       const existing: any = data;
-      
-      const speakAvg = sp.scores.length > 0 
-        ? sp.scores.reduce((a, b) => a + b, 0) / sp.scores.length
-        : sp.totalPoints / Math.max(sp.scores.length || 1, 4);
 
       if (existing) {
         speakerMap[sp.name] = {
@@ -107,8 +113,11 @@ export async function POST(req: NextRequest) {
           eloChange: 0,
           totalTournaments: existing.total_tournaments || 0,
           careerAvgSpeak: existing.career_avg_speak || 0,
-          speakAvg: speakAvg,
-          milestones: existing.milestones || []
+          speakAvg: 0, // Will be recalculated from prelim rounds only
+          milestones: existing.milestones || [],
+          brCount: 0, brBonusTotal: 0,
+          pairwiseWins: 0, pairwiseLosses: 0, pairwiseTies: 0,
+          prelimSpeakTotal: 0, prelimRoundCount: 0,
         };
       } else {
         const insertObj: any = { name: sp.name, elo: 1000, total_tournaments: 0, career_avg_speak: 0 };
@@ -125,8 +134,11 @@ export async function POST(req: NextRequest) {
             eloChange: 0,
             totalTournaments: 0,
             careerAvgSpeak: 0,
-            speakAvg: speakAvg,
-            milestones: []
+            speakAvg: 0,
+            milestones: [],
+            brCount: 0, brBonusTotal: 0,
+            pairwiseWins: 0, pairwiseLosses: 0, pairwiseTies: 0,
+            prelimSpeakTotal: 0, prelimRoundCount: 0,
           };
         }
       }
@@ -150,7 +162,8 @@ export async function POST(req: NextRequest) {
 
     // 3. Process Rooms (Matchups + Elo Calculation iteratively)
     const h2hRecords: any[] = [];
-    const speakerInroundCount: Record<string, number> = {};
+    // speakerInroundCount tracks which score index to use for each speaker's prelim rounds
+    const speakerPrelimIdx: Record<string, number> = {};
     
     for (const room of results.rooms) {
       const teamStates: { name: string, elo: number, speakers: SpeakerState[] }[] = [];
@@ -210,10 +223,13 @@ export async function POST(req: NextRequest) {
           teamRawDeltas.set(tB.name, (teamRawDeltas.get(tB.name) || 0) + rawDeltaB);
 
           // ===== 6-Way Cross H2H: All speakers of tA vs all speakers of tB =====
+          // NOTE: matchCount (K-factor) is NOT touched here — only pairwise stat counters.
           for (const spA of tA.speakers) {
             for (const spB of tB.speakers) {
               if (SA > SB) {
                 // spA wins over spB
+                spA.pairwiseWins++;
+                spB.pairwiseLosses++;
                 h2hRecords.push({
                   winner_id: spA.id, loser_id: spB.id,
                   tournament_id: tournamentId, round_name: room.name,
@@ -221,13 +237,17 @@ export async function POST(req: NextRequest) {
                 });
               } else if (SA < SB) {
                 // spB wins over spA
+                spB.pairwiseWins++;
+                spA.pairwiseLosses++;
                 h2hRecords.push({
                   winner_id: spB.id, loser_id: spA.id,
                   tournament_id: tournamentId, round_name: room.name,
                   round_count: 1, is_tie: false
                 });
               } else {
-                // Tie (SA === SB === 0.5): write tie records for both directions
+                // Tie (SA === SB === 0.5)
+                spA.pairwiseTies++;
+                spB.pairwiseTies++;
                 h2hRecords.push({
                   winner_id: spA.id, loser_id: spB.id,
                   tournament_id: tournamentId, round_name: room.name,
@@ -245,38 +265,51 @@ export async function POST(req: NextRequest) {
          
          if (t.speakers.length === 1) {
            const s = t.speakers[0];
-           if (!room.isOutround) {
-             speakerInroundCount[s.name] = (speakerInroundCount[s.name] || 0) + 1;
-           }
-           const personalK = getKFactor(s.matchCount);
+           // matchCount = salon sayısı (K-faktörü için)
+           s.matchCount += 1;
+           const personalK = getKFactor(s.matchCount - 1); // K for this match
            const change = personalK * rawDelta * 2;
-           
            s.elo += change;
            s.eloChange += change;
-           s.matchCount += 1;
+
+           // Prelim-only SP tracking (Fix #4)
+           if (!room.isOutround) {
+             const idx = speakerPrelimIdx[s.name] || 0;
+             const orig = scraped.find(x => x.name === s.name);
+             const score = orig?.scores[idx] || 0;
+             s.prelimSpeakTotal += score;
+             s.prelimRoundCount += 1;
+             speakerPrelimIdx[s.name] = idx + 1;
+           }
          } else if (t.speakers.length >= 2) {
            const s1 = t.speakers[0];
            const s2 = t.speakers[1];
            
-           const k1 = getKFactor(s1.matchCount);
+           const k1 = getKFactor(s1.matchCount); // K before increment
            const k2 = getKFactor(s2.matchCount);
            
+           // matchCount = salon sayısı (K-faktörü için) — H2H döngüsüyle ALAKASIZ
            s1.matchCount += 1;
            s2.matchCount += 1;
            
            let sp1 = 0;
            let sp2 = 0;
+           // Prelim-only SP tracking (Fix #4)
            if (!room.isOutround) {
-             speakerInroundCount[s1.name] = (speakerInroundCount[s1.name] || 0) + 1;
-             speakerInroundCount[s2.name] = (speakerInroundCount[s2.name] || 0) + 1;
-             
-             const r1Idx = speakerInroundCount[s1.name] - 1;
-             const r2Idx = speakerInroundCount[s2.name] - 1;
+             const r1Idx = speakerPrelimIdx[s1.name] || 0;
+             const r2Idx = speakerPrelimIdx[s2.name] || 0;
              const orig1 = scraped.find(x => x.name === s1.name);
              const orig2 = scraped.find(x => x.name === s2.name);
              
              sp1 = orig1?.scores[r1Idx] || 0;
              sp2 = orig2?.scores[r2Idx] || 0;
+
+             s1.prelimSpeakTotal += sp1;
+             s1.prelimRoundCount += 1;
+             s2.prelimSpeakTotal += sp2;
+             s2.prelimRoundCount += 1;
+             speakerPrelimIdx[s1.name] = r1Idx + 1;
+             speakerPrelimIdx[s2.name] = r2Idx + 1;
            }
 
            const sumElo = s1.elo + s2.elo; 
@@ -349,14 +382,18 @@ export async function POST(req: NextRequest) {
     const championSet = new Set(results.champions.map((n) => n.toLowerCase()));
     const bestSpeakerSet = new Set(results.bestSpeakers.map((n) => n.toLowerCase()));
 
+    const BREAK_BONUS = 5;
     for (const spName of Object.keys(speakerMap)) {
       const speaker = speakerMap[spName];
       const teamName = speakerTeamMap[spName] || "";
       const didBreak = [...breakSet].some((b) => teamName.includes(b) || b.includes(teamName));
       
       if (didBreak) {
-        speaker.elo += 5;
-        speaker.eloChange += 5;
+        speaker.elo += BREAK_BONUS;
+        speaker.eloChange += BREAK_BONUS;
+        // Fix #1: Track break count and total bonus earned
+        speaker.brCount += 1;
+        speaker.brBonusTotal += BREAK_BONUS;
       }
     }
 
@@ -380,12 +417,17 @@ export async function POST(req: NextRequest) {
       const didFinal = [...finalSet].some((f) => spTeamLower.includes(f) || f.includes(spTeamLower) || nameLower.includes(f));
       const didChamp = [...championSet].some((c) => spTeamLower.includes(c) || c.includes(spTeamLower) || nameLower.includes(c));
 
+      // Fix #4: Prelim-only Avg SP
+      const prelimSpeakAvg = spData.prelimRoundCount > 0
+        ? spData.prelimSpeakTotal / spData.prelimRoundCount
+        : 0;
+
       finalEloChanges[sp.name] = Math.round(spData.eloChange);
 
       statsInserts.push({
         tournament_id: tournamentId,
         speaker_id: spData.id,
-        speak_avg: spData.speakAvg,
+        speak_avg: Math.round(prelimSpeakAvg * 100) / 100, // Prelim-only
         partner_id: partnerId || null,
         break_status: didBreak,
         final_status: didFinal,
@@ -395,7 +437,6 @@ export async function POST(req: NextRequest) {
         carry_bonus: 0,
       });
 
-      // To avoid massive history inserts, optionally just insert one per tournament
       historyInserts.push({
         speaker_id: spData.id,
         tournament_id: tournamentId,
@@ -404,16 +445,35 @@ export async function POST(req: NextRequest) {
       });
 
       const newTotalTournaments = spData.totalTournaments + 1;
-      const newCareerAvg = ((spData.careerAvgSpeak * spData.totalTournaments) + spData.speakAvg) / newTotalTournaments;
+      // Fix #4: Career avg SP from prelim-only
+      const newCareerAvg = prelimSpeakAvg > 0
+        ? ((spData.careerAvgSpeak * spData.totalTournaments) + prelimSpeakAvg) / newTotalTournaments
+        : spData.careerAvgSpeak;
+
+      // Fix #3: Pairwise Win Rate
+      const totalPairwise = spData.pairwiseWins + spData.pairwiseLosses + spData.pairwiseTies;
+      const newWinRate = totalPairwise > 0
+        ? ((spData.pairwiseWins + spData.pairwiseTies * 0.5) / totalPairwise) * 100
+        : 0;
 
       const spUpdateObj: any = {
         id: spData.id,
         elo: Math.round(spData.elo),
         total_tournaments: newTotalTournaments,
         career_avg_speak: Math.round(newCareerAvg * 100) / 100,
+        win_rate: Math.round(newWinRate * 100) / 100,
       };
       if (hasMatchCountCol) spUpdateObj.match_count = spData.matchCount;
-      
+
+      // Fix #1: br_count and br_bonus_total (if columns exist)
+      try {
+        const { error: brTestErr } = await supabase.from("speakers").select("br_count").limit(1);
+        if (!brTestErr) {
+          spUpdateObj.br_count = spData.brCount;
+          spUpdateObj.br_bonus_total = spData.brBonusTotal;
+        }
+      } catch(e) {}
+
       speakerUpdates.push(spUpdateObj);
     }
 

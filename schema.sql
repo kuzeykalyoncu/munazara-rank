@@ -11,6 +11,17 @@ CREATE TABLE IF NOT EXISTS speakers (
   total_tournaments INTEGER NOT NULL DEFAULT 0,
   win_rate NUMERIC(5,2) NOT NULL DEFAULT 0,
   career_avg_speak NUMERIC(5,2) NOT NULL DEFAULT 0,
+  match_count INTEGER NOT NULL DEFAULT 0,
+  -- Break tracking
+  br_count INTEGER NOT NULL DEFAULT 0,
+  br_bonus_total INTEGER NOT NULL DEFAULT 0,
+  -- Pairwise win/loss/tie (win_rate kaynağı)
+  pairwise_wins INTEGER NOT NULL DEFAULT 0,
+  pairwise_losses INTEGER NOT NULL DEFAULT 0,
+  pairwise_ties INTEGER NOT NULL DEFAULT 0,
+  -- Prelim-only SP (career_avg_speak kaynağı)
+  prelim_speak_total NUMERIC(10,2) NOT NULL DEFAULT 0,
+  prelim_round_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
