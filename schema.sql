@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS h2h_records (
   loser_id UUID REFERENCES speakers(id) ON DELETE CASCADE,
   tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE,
   round_name TEXT,
-  round_count INTEGER DEFAULT 1
+  round_count INTEGER DEFAULT 1,
+  is_tie BOOLEAN DEFAULT FALSE
 
 );
 

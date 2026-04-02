@@ -32,6 +32,7 @@ interface SpeakerProfile {
   }[];
   h2hWins: { id: string; loser: { name: string } | null; round_count: number; tournament_id: string; round_name?: string; tournaments: { name: string } | null }[];
   h2hLosses: { id: string; winner: { name: string } | null; round_count: number; tournament_id: string; round_name?: string; tournaments: { name: string } | null }[];
+  h2hTies: { id: string; winner: { name: string } | null; loser: { name: string } | null; round_count: number; tournament_id: string; round_name?: string; tournaments: { name: string } | null }[];
   tournamentStats: {
     id: string;
     speak_avg: number;
@@ -119,7 +120,7 @@ export default function SpeakerProfilePage() {
     );
   }
 
-  const { speaker, eloHistory, h2hWins, h2hLosses, tournamentStats } = data;
+  const { speaker, eloHistory, h2hWins, h2hLosses, h2hTies, tournamentStats } = data;
 
   // Build chart data
   const chartData = eloHistory.map((e, i) => ({
@@ -131,11 +132,11 @@ export default function SpeakerProfilePage() {
     chartData.unshift({ name: "Başlangıç", elo: 1000 });
   }
 
-  // Aggregate H2H
-  const h2hMap: Record<string, { name: string; wins: number; losses: number; matches: any[] }> = {};
+  // Aggregate H2H (Wins, Losses, Ties)
+  const h2hMap: Record<string, { name: string; wins: number; losses: number; ties: number; matches: any[] }> = {};
   for (const w of h2hWins) {
     const name = w.loser?.name ?? "Bilinmiyor";
-    if (!h2hMap[name]) h2hMap[name] = { name, wins: 0, losses: 0, matches: [] };
+    if (!h2hMap[name]) h2hMap[name] = { name, wins: 0, losses: 0, ties: 0, matches: [] };
     h2hMap[name].wins += w.round_count;
     h2hMap[name].matches.push({ 
         tournament: w.tournaments?.name || "Bilinmeyen Turnuva", 
@@ -145,7 +146,7 @@ export default function SpeakerProfilePage() {
   }
   for (const l of h2hLosses) {
     const name = l.winner?.name ?? "Bilinmiyor";
-    if (!h2hMap[name]) h2hMap[name] = { name, wins: 0, losses: 0, matches: [] };
+    if (!h2hMap[name]) h2hMap[name] = { name, wins: 0, losses: 0, ties: 0, matches: [] };
     h2hMap[name].losses += l.round_count;
     h2hMap[name].matches.push({ 
         tournament: l.tournaments?.name || "Bilinmeyen Turnuva", 
@@ -153,10 +154,24 @@ export default function SpeakerProfilePage() {
         result: "Mağlubiyet" 
     });
   }
-  const h2hList = Object.values(h2hMap).sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses));
+  for (const t of (h2hTies || [])) {
+    // In tie records, winner_id stores one side. Determine the opponent.
+    const opponentName = t.winner?.name === speaker.name 
+      ? (t.loser?.name ?? "Bilinmiyor") 
+      : (t.winner?.name ?? "Bilinmiyor");
+    if (!h2hMap[opponentName]) h2hMap[opponentName] = { name: opponentName, wins: 0, losses: 0, ties: 0, matches: [] };
+    h2hMap[opponentName].ties += t.round_count;
+    h2hMap[opponentName].matches.push({
+        tournament: t.tournaments?.name || "Bilinmeyen Turnuva",
+        round: t.round_name || "Bilinmeyen Tur",
+        result: "Beraberlik"
+    });
+  }
+  const h2hList = Object.values(h2hMap).sort((a, b) => (b.wins + b.losses + b.ties) - (a.wins + a.losses + a.ties));
 
   const initials = speaker.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-  const totalH2H = h2hWins.reduce((a, w) => a + w.round_count, 0) + h2hLosses.reduce((a, l) => a + l.round_count, 0);
+  const totalH2H = h2hWins.reduce((a, w) => a + w.round_count, 0) + h2hLosses.reduce((a, l) => a + l.round_count, 0) + (h2hTies || []).reduce((a: number, t: any) => a + t.round_count, 0);
+
 
 
   return (
@@ -249,16 +264,22 @@ export default function SpeakerProfilePage() {
           </h2>
           <div className="space-y-4">
             {h2hList.map((record, i) => {
-              const total = record.wins + record.losses;
+              const total = record.wins + record.losses + record.ties;
               const winPct = total > 0 ? (record.wins / total) * 100 : 0;
               return (
                 <div key={i} className="bg-white/3 rounded-xl p-4 space-y-3">
                   <div className="flex items-center gap-4">
                     <div className="flex-1 font-bold text-white truncate">{record.name}</div>
-                    <div className="flex items-center gap-2 text-sm shrink-0">
+                    <div className="flex items-center gap-1.5 text-sm shrink-0">
                       <span className="text-green-400 font-bold">{record.wins}G</span>
                       <span className="text-gray-600">/</span>
                       <span className="text-red-400 font-bold">{record.losses}M</span>
+                      {record.ties > 0 && (
+                        <>
+                          <span className="text-gray-600">/</span>
+                          <span className="text-yellow-400 font-bold">{record.ties}B</span>
+                        </>
+                      )}
                     </div>
                     <div className="w-24 hidden sm:block">
                       <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
@@ -268,7 +289,7 @@ export default function SpeakerProfilePage() {
                         />
                       </div>
                     </div>
-                    <div className={`text-xs font-mono w-10 text-right ${winPct >= 50 ? "text-green-400" : "text-red-400"}`}>
+                    <div className={`text-xs font-mono w-10 text-right ${winPct >= 50 ? "text-green-400" : winPct > 0 ? "text-red-400" : "text-gray-500"}`}>
                       {winPct.toFixed(0)}%
                     </div>
                   </div>
@@ -282,7 +303,11 @@ export default function SpeakerProfilePage() {
                            <span className="mx-1 opacity-30">•</span>
                            <span>{m.round}</span>
                         </div>
-                        <div className={m.result === "Galibiyet" ? "text-green-500/70" : "text-red-500/70"}>
+                        <div className={
+                          m.result === "Galibiyet" ? "text-green-500/70" : 
+                          m.result === "Beraberlik" ? "text-yellow-500/70" : 
+                          "text-red-500/70"
+                        }>
                           {m.result}
                         </div>
                       </div>
@@ -292,6 +317,7 @@ export default function SpeakerProfilePage() {
               );
             })}
           </div>
+
 
         </div>
       )}

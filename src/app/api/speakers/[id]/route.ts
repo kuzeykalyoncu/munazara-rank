@@ -25,17 +25,27 @@ export async function GET(
       .eq("speaker_id", id)
       .order("recorded_at", { ascending: true });
 
-    // H2H as winner
+    // H2H as winner (excluding ties)
     const { data: h2hWins } = await supabase
       .from("h2h_records")
       .select("*, loser:speakers!h2h_records_loser_id_fkey(name), tournaments(name)")
-      .eq("winner_id", id);
+      .eq("winner_id", id)
+      .or("is_tie.is.null,is_tie.eq.false");
 
-    // H2H as loser
+    // H2H as loser (excluding ties)
     const { data: h2hLosses } = await supabase
       .from("h2h_records")
       .select("*, winner:speakers!h2h_records_winner_id_fkey(name), tournaments(name)")
-      .eq("loser_id", id);
+      .eq("loser_id", id)
+      .or("is_tie.is.null,is_tie.eq.false");
+
+    // H2H ties (winner_id stores one side of the tie)
+    const { data: h2hTies } = await supabase
+      .from("h2h_records")
+      .select("*, loser:speakers!h2h_records_loser_id_fkey(name), winner:speakers!h2h_records_winner_id_fkey(name), tournaments(name)")
+      .eq("is_tie", true)
+      .or(`winner_id.eq.${id},loser_id.eq.${id}`);
+
 
     // Tournament stats with partner info
     const { data: tournamentStats } = await supabase
@@ -51,6 +61,7 @@ export async function GET(
       eloHistory: eloHistory || [],
       h2hWins: h2hWins || [],
       h2hLosses: h2hLosses || [],
+      h2hTies: h2hTies || [],
       tournamentStats: tournamentStats || [],
     });
   } catch (error) {

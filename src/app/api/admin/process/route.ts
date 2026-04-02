@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Process Rooms (Matchups + Elo Calculation iteratively)
-    const teamH2HRecords: any[] = [];
+    const h2hRecords: any[] = [];
     const speakerInroundCount: Record<string, number> = {};
     
     for (const room of results.rooms) {
@@ -167,26 +167,38 @@ export async function POST(req: NextRequest) {
 
       if (teamStates.length < 2) continue; // Invalid room
 
+      // Detect match mode: Standard / Outround / Final
+      const rName = room.name?.toLowerCase() || "";
+      const isFinal = room.isOutround && teamStates.length === 4 &&
+        rName.includes("final") && !rName.includes("yarı") && !rName.includes("çeyrek") && !rName.includes("octo") && !rName.includes("semi") && !rName.includes("quarter");
+
       const teamRawDeltas = new Map<string, number>();
 
       // Pairwise matchups (1st beats 2nd, 3rd... 2nd beats 3rd...)
       for (let i = 0; i < teamStates.length; i++) {
         for (let j = i + 1; j < teamStates.length; j++) {
-          const tA = teamStates[i]; // Winner
-          const tB = teamStates[j]; // Loser
+          const tA = teamStates[i]; // Higher placement
+          const tB = teamStates[j]; // Lower placement
           
           let SA = 1;
           let SB = 0;
 
-          if (room.isOutround && teamStates.length === 4) {
+          if (isFinal && teamStates.length === 4) {
+            // Final Mode: 1. takım herkesi yener, 2-3-4 arası berabere
+            if (i === 0) {
+              SA = 1; SB = 0; // Champion beats everyone
+            } else {
+              SA = 0.5; SB = 0.5; // 2,3,4 arası berabere
+            }
+          } else if (room.isOutround && teamStates.length === 4) {
+            // Outround Mode: 1-2 arası berabere, 3-4 arası berabere, 1-2 > 3-4
             if (i < 2 && j < 2) {
-              SA = 0.5;
-              SB = 0.5;
+              SA = 0.5; SB = 0.5;
             } else if (i >= 2 && j >= 2) {
-              SA = 0.5;
-              SB = 0.5;
+              SA = 0.5; SB = 0.5;
             }
           }
+          // else: Standard Mode (SA=1, SB=0) — default
 
           const EA = expectedScore(tA.elo, tB.elo);
           const EB = expectedScore(tB.elo, tA.elo);
@@ -197,15 +209,32 @@ export async function POST(req: NextRequest) {
           teamRawDeltas.set(tA.name, (teamRawDeltas.get(tA.name) || 0) + rawDeltaA);
           teamRawDeltas.set(tB.name, (teamRawDeltas.get(tB.name) || 0) + rawDeltaB);
 
-          if (tA.speakers.length > 0 && tB.speakers.length > 0) {
-             teamH2HRecords.push({
-                winner_id: tA.speakers[0].id,
-                loser_id: tB.speakers[0].id,
-                tournament_id: tournamentId,
-                round_name: room.name, // Added for detailed H2H
-                round_count: 1
-             });
-
+          // ===== 6-Way Cross H2H: All speakers of tA vs all speakers of tB =====
+          for (const spA of tA.speakers) {
+            for (const spB of tB.speakers) {
+              if (SA > SB) {
+                // spA wins over spB
+                h2hRecords.push({
+                  winner_id: spA.id, loser_id: spB.id,
+                  tournament_id: tournamentId, round_name: room.name,
+                  round_count: 1, is_tie: false
+                });
+              } else if (SA < SB) {
+                // spB wins over spA
+                h2hRecords.push({
+                  winner_id: spB.id, loser_id: spA.id,
+                  tournament_id: tournamentId, round_name: room.name,
+                  round_count: 1, is_tie: false
+                });
+              } else {
+                // Tie (SA === SB === 0.5): write tie records for both directions
+                h2hRecords.push({
+                  winner_id: spA.id, loser_id: spB.id,
+                  tournament_id: tournamentId, round_name: room.name,
+                  round_count: 1, is_tie: true
+                });
+              }
+            }
           }
         }
       }
@@ -285,7 +314,6 @@ export async function POST(req: NextRequest) {
 
       // 3.5 Milestones (No extra Elo bonuses here per user request)
       if (room.isOutround) {
-        const rName = room.name?.toLowerCase() || "";
         let stageName = "Outround";
         if (rName.includes("final") && !rName.includes("yarı") && !rName.includes("çeyrek") && !rName.includes("octo")) {
           stageName = "Finalist";
@@ -305,8 +333,6 @@ export async function POST(req: NextRequest) {
           }
         }
       }
-
-
 
     }
 
@@ -405,9 +431,9 @@ export async function POST(req: NextRequest) {
       if (historyError) throw new Error("History Insert Error: " + historyError.message);
     }
     
-    if (teamH2HRecords.length > 0) {
+    if (h2hRecords.length > 0) {
       // H2H is purely informational, don't crash on fail
-      const { error: h2hErr } = await supabase.from("h2h_records").insert(teamH2HRecords);
+      const { error: h2hErr } = await supabase.from("h2h_records").insert(h2hRecords);
       if (h2hErr) console.error("H2H error:", h2hErr);
     }
 
