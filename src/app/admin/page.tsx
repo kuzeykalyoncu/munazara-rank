@@ -222,6 +222,8 @@ export default function AdminPage() {
   }
 
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
+  const [processPreview, setProcessPreview] = useState<any[] | null>(null);
+  const [overrideBreaks, setOverrideBreaks] = useState<Record<string, boolean>>({});
 
   async function handleScrape(e?: React.FormEvent, url?: string, bCount?: string) {
     if (e) e.preventDefault();
@@ -272,6 +274,72 @@ export default function AdminPage() {
       if (!syncProgress) setLoading(false);
     }
     return null;
+  }
+
+  async function handlePreview() {
+    if (!scrapePreview || !currentTournamentId) {
+      setStatus("❌ Önce turnuvayı tarayın.");
+      return;
+    }
+    setLoading(true);
+    setStatus("🔍 Önizleme hesaplanıyor...");
+    try {
+      const res = await fetch("/api/admin/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tournamentId: currentTournamentId,
+          speakers: scrapePreview.speakers,
+          teams: scrapePreview.teams,
+          results: scrapePreview.results,
+          breakCount: breakCount || scrapePreview.inferredBreakCount,
+          dryRun: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setStatus(`❌ Önizleme hatası: ${data.error}`); return; }
+      // Initialize overrideBreaks with detected values
+      const initial: Record<string, boolean> = {};
+      for (const sp of data.speakers || []) {
+        initial[sp.speakerId] = sp.didBreak;
+      }
+      setOverrideBreaks(initial);
+      setProcessPreview(data.speakers || []);
+      setStatus("✅ Önizleme hazır. Break tespitlerini kontrol edin ve onaylayın.");
+    } catch { setStatus("❌ Önizleme sırasında hata oluştu."); }
+    finally { setLoading(false); }
+  }
+
+  async function handleFinalize() {
+    if (!scrapePreview || !currentTournamentId) return;
+    setLoading(true);
+    setStatus("⚙️ ELO hesaplanıyor ve kaydediliyor...");
+    try {
+      const res = await fetch("/api/admin/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tournamentId: currentTournamentId,
+          speakers: scrapePreview.speakers,
+          teams: scrapePreview.teams,
+          results: scrapePreview.results,
+          breakCount: breakCount || scrapePreview.inferredBreakCount,
+          dryRun: false,
+          overrideBreaks,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setStatus(`❌ İşlem hatası: ${data.error}`); return; }
+      setStatus(`🏆 İşlendi! ${data.processed} konuşmacı güncellendi.`);
+      setScrapePreview(null);
+      setProcessPreview(null);
+      setOverrideBreaks({});
+      setTournamentUrl("");
+      setBreakCount("");
+      setCurrentTournamentId(null);
+      loadTournaments();
+    } catch { setStatus("❌ İşlem sırasında hata oluştu."); }
+    finally { setLoading(false); }
   }
 
   async function handleProcess(previewData?: any, tId?: string) {
@@ -539,13 +607,31 @@ export default function AdminPage() {
                 Veritabanına kaydetmeden önce kontrol edin
               </p>
             </div>
-            <button
-              onClick={() => handleProcess()}
-              disabled={loading}
-              className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold hover:from-green-500 hover:to-emerald-500 transition-all shadow-lg shadow-green-500/30 disabled:opacity-50 active:scale-95"
-            >
-              {loading ? "İşleniyor..." : "✅ ELO'ları Hesapla & Kaydet"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setScrapePreview(null); setProcessPreview(null); setOverrideBreaks({}); }}
+                className="px-4 py-2 rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition text-sm"
+              >
+                ✕ İptal
+              </button>
+              {!processPreview ? (
+                <button
+                  onClick={handlePreview}
+                  disabled={loading}
+                  className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold hover:from-indigo-500 hover:to-violet-500 transition-all shadow-lg shadow-indigo-500/30 disabled:opacity-50 active:scale-95 whitespace-nowrap"
+                >
+                  {loading ? "Hesaplanıyor..." : "🔍 Önizle & Break Kontrol Et"}
+                </button>
+              ) : (
+                <button
+                  onClick={handleFinalize}
+                  disabled={loading}
+                  className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold hover:from-green-500 hover:to-emerald-500 transition-all shadow-lg shadow-green-500/30 disabled:opacity-50 active:scale-95 whitespace-nowrap"
+                >
+                  {loading ? "Kaydediliyor..." : "✅ Onayla & Kaydet"}
+                </button>
+              )}
+            </div>
           </div>
 
           {((scrapePreview.inferredBreakCount || 0) > 0) && !breakCount && (
@@ -632,6 +718,53 @@ export default function AdminPage() {
               </div>
             </div>
           )}
+          {/* Process Preview Table — Break Toggle */}
+          {processPreview && (
+            <div className="bg-white/3 border border-indigo-500/20 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 bg-indigo-500/10 border-b border-indigo-500/20 flex items-center gap-2">
+                <span className="text-lg">📊</span>
+                <span className="text-sm font-semibold text-indigo-300">Elo Önizleme — Break tespitlerini düzeltin</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 text-gray-500 uppercase tracking-wider">
+                      <th className="px-3 py-2 text-left">Konuşmacı</th>
+                      <th className="px-3 py-2 text-right">Avg Prelim SP</th>
+                      <th className="px-3 py-2 text-right">Elo Değişimi</th>
+                      <th className="px-3 py-2 text-right">Elo Sonrası</th>
+                      <th className="px-3 py-2 text-center">Break ✓</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {processPreview.map((sp: any) => (
+                      <tr key={sp.speakerId} className="border-b border-white/5 hover:bg-white/3">
+                        <td className="px-3 py-2 font-medium text-white">{sp.name}</td>
+                        <td className="px-3 py-2 text-right text-gray-400">{sp.prelimSpeakAvg > 0 ? sp.prelimSpeakAvg.toFixed(1) : '—'}</td>
+                        <td className={`px-3 py-2 text-right font-mono font-bold ${sp.eloChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {sp.eloChange >= 0 ? '+' : ''}{sp.eloChange}
+                        </td>
+                        <td className="px-3 py-2 text-right text-gray-400 font-mono">{sp.eloAfter}</td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => setOverrideBreaks(prev => ({ ...prev, [sp.speakerId]: !prev[sp.speakerId] }))}
+                            className={`w-8 h-5 rounded-full transition-colors relative ${
+                              overrideBreaks[sp.speakerId] ? 'bg-green-500' : 'bg-white/10'
+                            }`}
+                          >
+                            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${
+                              overrideBreaks[sp.speakerId] ? 'left-3.5' : 'left-0.5'
+                            }`} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
         </div>
       )}
 

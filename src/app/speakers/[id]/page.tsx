@@ -14,6 +14,24 @@ import {
   ReferenceLine,
 } from "recharts";
 
+interface RoundLog {
+  id: string;
+  tournament_id: string;
+  round_name: string;
+  is_outround: boolean;
+  placement: number;
+  partner_name: string | null;
+  partner_sp: number | null;
+  own_sp: number | null;
+  sp_diff: number | null;
+  distribution_mode: string;
+  team_raw_delta: number;
+  elo_change: number;
+  elo_before: number;
+  elo_after: number;
+  tournaments: { name: string } | null;
+}
+
 interface SpeakerProfile {
   speaker: {
     id: string;
@@ -24,6 +42,7 @@ interface SpeakerProfile {
     career_avg_speak: number;
     br_count: number;
     br_bonus_total: number;
+    career_break_count: number;
   };
   eloHistory: {
     id: string;
@@ -44,9 +63,10 @@ interface SpeakerProfile {
     best_speaker_status: boolean;
     elo_change: number;
     carry_bonus: number;
-    tournaments: { name: string; base_url: string } | null;
+    tournaments: { name: string; base_url: string; id?: string } | null;
     partner: { name: string; elo: number } | null;
   }[];
+  roundLogs: RoundLog[];
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
@@ -81,6 +101,126 @@ const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?:
   return null;
 };
 
+function DistributionBadge({ mode }: { mode: string }) {
+  if (mode === "performans") return <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-400 border border-blue-500/20">Performans</span>;
+  if (mode === "gelisim") return <span className="text-xs px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 border border-purple-500/20">Gelişim</span>;
+  if (mode === "kayip") return <span className="text-xs px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 border border-red-500/20">Kayıp</span>;
+  if (mode === "outround") return <span className="text-xs px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-400 border border-orange-500/20">Eleme</span>;
+  return null;
+}
+
+function RoundAuditModal({ tournamentName, rounds, breakBonus, onClose }: {
+  tournamentName: string;
+  rounds: RoundLog[];
+  breakBonus: boolean;
+  onClose: () => void;
+}) {
+  const prelims = rounds.filter(r => !r.is_outround);
+  const outrounds = rounds.filter(r => r.is_outround);
+  const totalElo = rounds.reduce((sum, r) => sum + r.elo_change, 0) + (breakBonus ? 5 : 0);
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="glass rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto space-y-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold text-white">📋 Elo Dekontu: {tournamentName}</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition text-xl">✕</button>
+        </div>
+
+        {/* Prelim Rounds */}
+        {prelims.length > 0 && (
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Grup Turları</div>
+            <div className="space-y-2">
+              {prelims.map((r, i) => (
+                <div key={r.id} className="bg-white/3 rounded-xl px-4 py-3 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-white font-medium text-sm">{r.round_name}</span>
+                      <span className="text-gray-600 text-xs">#{r.placement}. Sıra</span>
+                      <DistributionBadge mode={r.distribution_mode} />
+                    </div>
+                    <span className={`font-bold font-mono text-sm ${r.elo_change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {r.elo_change >= 0 ? '+' : ''}{r.elo_change.toFixed(1)} Elo
+                    </span>
+                  </div>
+                  {r.partner_name && (
+                    <div className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
+                      <span>
+                        Takım arkadaşı: <span className="text-gray-300">{r.partner_name}</span>
+                        {r.partner_sp !== null && <span className="text-indigo-400 ml-1">(SP: {r.partner_sp})</span>}
+                      </span>
+                      {r.own_sp !== null && (
+                        <>
+                          <span className="text-gray-700">|</span>
+                          <span>Kendi SP: <span className="text-gray-300">{r.own_sp}</span></span>
+                        </>
+                      )}
+                      {r.sp_diff !== null && (
+                        <>
+                          <span className="text-gray-700">|</span>
+                          <span>Fark: <span className={r.sp_diff > 1 ? 'text-blue-400' : 'text-purple-400'}>{r.sp_diff} puan</span></span>
+                          <span className="text-gray-600 text-xs">({r.sp_diff > 1 ? '→ Performans modu' : '→ Gelişim modu'})</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-600">
+                    {r.elo_before.toFixed(0)} → {r.elo_after.toFixed(0)} ELO
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Outrounds */}
+        {outrounds.length > 0 && (
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Eleme Turları</div>
+            <div className="space-y-2">
+              {outrounds.map(r => (
+                <div key={r.id} className="bg-white/3 rounded-xl px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-medium text-sm">{r.round_name}</span>
+                    <span className="text-gray-600 text-xs">#{r.placement}. Sıra</span>
+                    <DistributionBadge mode="outround" />
+                  </div>
+                  <span className={`font-bold font-mono text-sm ${r.elo_change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {r.elo_change >= 0 ? '+' : ''}{r.elo_change.toFixed(1)} Elo
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Break Bonus */}
+        {breakBonus && (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 flex items-center justify-between">
+            <span className="text-green-400 text-sm">⚡ Break Bonusu</span>
+            <span className="font-bold font-mono text-sm text-green-400">+5 Elo</span>
+          </div>
+        )}
+
+        {/* Total */}
+        <div className="border-t border-white/10 pt-3 flex items-center justify-between">
+          <span className="text-gray-300 font-semibold">Net Toplam</span>
+          <span className={`text-xl font-extrabold font-mono ${totalElo >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {totalElo >= 0 ? '+' : ''}{totalElo.toFixed(1)} ELO
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SpeakerProfilePage() {
   const params = useParams();
   const id = params.id as string;
@@ -88,6 +228,7 @@ export default function SpeakerProfilePage() {
   const [data, setData] = useState<SpeakerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [auditModal, setAuditModal] = useState<{ tournamentId: string; tournamentName: string; breakStatus: boolean } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -100,81 +241,65 @@ export default function SpeakerProfilePage() {
       });
   }, [id]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-32">
-        <div className="text-center">
-          <div className="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-400">Profil yükleniyor...</p>
-        </div>
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="text-center">
+        <div className="w-12 h-12 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-gray-400">Profil yükleniyor...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (error || !data) {
-    return (
-      <div className="text-center py-32">
-        <p className="text-red-400 text-lg">{error || "Konuşmacı bulunamadı."}</p>
-        <Link href="/" className="text-indigo-400 mt-2 inline-block hover:underline">
-          ← Leaderboard&apos;a dön
-        </Link>
-      </div>
-    );
-  }
+  if (error || !data) return (
+    <div className="text-center py-24 text-gray-500">
+      {error || "Konuşmacı bulunamadı."}
+    </div>
+  );
 
-  const { speaker, eloHistory, h2hWins, h2hLosses, h2hTies, tournamentStats } = data;
+  const { speaker, eloHistory, h2hWins, h2hLosses, h2hTies, tournamentStats, roundLogs } = data;
 
-  // Build chart data
-  const chartData = eloHistory.map((e, i) => ({
-    name: e.tournaments?.name?.split(" ")?.[0] ?? `T${i + 1}`,
-    elo: e.elo_after,
+  const chartData = eloHistory.map((h, i) => ({
+    name: h.tournaments?.name?.slice(0, 15) ?? `T${i + 1}`,
+    elo: h.elo_after,
+    tournamentId: (h as any).tournament_id ?? "",
   }));
-  // Add starting point
-  if (chartData.length > 0) {
-    chartData.unshift({ name: "Başlangıç", elo: 1000 });
-  }
 
-  // Aggregate H2H (Wins, Losses, Ties)
-  const h2hMap: Record<string, { name: string; wins: number; losses: number; ties: number; matches: any[] }> = {};
+  // Build H2H map
+  const h2hMap: Record<string, { name: string; wins: number; losses: number; ties: number; matches: { tournament: string; round: string; result: string }[] }> = {};
   for (const w of h2hWins) {
-    const name = w.loser?.name ?? "Bilinmiyor";
-    if (!h2hMap[name]) h2hMap[name] = { name, wins: 0, losses: 0, ties: 0, matches: [] };
-    h2hMap[name].wins += w.round_count;
-    h2hMap[name].matches.push({ 
-        tournament: w.tournaments?.name || "Bilinmeyen Turnuva", 
-        round: w.round_name || "Bilinmeyen Tur",
-        result: "Galibiyet" 
-    });
+    const opp = w.loser?.name ?? "Bilinmiyor";
+    if (!h2hMap[opp]) h2hMap[opp] = { name: opp, wins: 0, losses: 0, ties: 0, matches: [] };
+    h2hMap[opp].wins += w.round_count;
+    h2hMap[opp].matches.push({ tournament: w.tournaments?.name || "Bilinmeyen Turnuva", round: w.round_name || "Bilinmeyen Tur", result: "Galibiyet" });
   }
   for (const l of h2hLosses) {
-    const name = l.winner?.name ?? "Bilinmiyor";
-    if (!h2hMap[name]) h2hMap[name] = { name, wins: 0, losses: 0, ties: 0, matches: [] };
-    h2hMap[name].losses += l.round_count;
-    h2hMap[name].matches.push({ 
-        tournament: l.tournaments?.name || "Bilinmeyen Turnuva", 
-        round: l.round_name || "Bilinmeyen Tur",
-        result: "Mağlubiyet" 
-    });
+    const opp = l.winner?.name ?? "Bilinmiyor";
+    if (!h2hMap[opp]) h2hMap[opp] = { name: opp, wins: 0, losses: 0, ties: 0, matches: [] };
+    h2hMap[opp].losses += l.round_count;
+    h2hMap[opp].matches.push({ tournament: l.tournaments?.name || "Bilinmeyen Turnuva", round: l.round_name || "Bilinmeyen Tur", result: "Mağlubiyet" });
   }
   for (const t of (h2hTies || [])) {
-    // In tie records, winner_id stores one side. Determine the opponent.
-    const opponentName = t.winner?.name === speaker.name 
-      ? (t.loser?.name ?? "Bilinmiyor") 
-      : (t.winner?.name ?? "Bilinmiyor");
-    if (!h2hMap[opponentName]) h2hMap[opponentName] = { name: opponentName, wins: 0, losses: 0, ties: 0, matches: [] };
-    h2hMap[opponentName].ties += t.round_count;
-    h2hMap[opponentName].matches.push({
-        tournament: t.tournaments?.name || "Bilinmeyen Turnuva",
-        round: t.round_name || "Bilinmeyen Tur",
-        result: "Beraberlik"
-    });
+    const opp = (t as any).winner_id === id ? (t.loser?.name ?? "Bilinmiyor") : (t.winner?.name ?? "Bilinmiyor");
+    if (!h2hMap[opp]) h2hMap[opp] = { name: opp, wins: 0, losses: 0, ties: 0, matches: [] };
+    h2hMap[opp].ties += t.round_count;
+    h2hMap[opp].matches.push({ tournament: t.tournaments?.name || "Bilinmeyen Turnuva", round: t.round_name || "Bilinmeyen Tur", result: "Beraberlik" });
   }
   const h2hList = Object.values(h2hMap).sort((a, b) => (b.wins + b.losses + b.ties) - (a.wins + a.losses + a.ties));
-
   const initials = speaker.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
   const totalH2H = h2hWins.reduce((a, w) => a + w.round_count, 0) + h2hLosses.reduce((a, l) => a + l.round_count, 0) + (h2hTies || []).reduce((a: number, t: any) => a + t.round_count, 0);
 
+  // Group roundLogs by tournament_id
+  const roundLogsByTournament: Record<string, RoundLog[]> = {};
+  for (const r of (roundLogs || [])) {
+    if (!roundLogsByTournament[r.tournament_id]) roundLogsByTournament[r.tournament_id] = [];
+    roundLogsByTournament[r.tournament_id].push(r);
+  }
 
+  // Determine which tournament stat is open
+  const openAuditRounds = auditModal ? roundLogsByTournament[auditModal.tournamentId] || [] : [];
+
+  const careerBreaks = speaker.career_break_count ?? speaker.br_count ?? 0;
+  const totalBreakBonus = careerBreaks * 5;
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
@@ -194,14 +319,13 @@ export default function SpeakerProfilePage() {
             <div className="mt-2 flex flex-wrap gap-2 justify-center sm:justify-start">
               <EloBadge elo={speaker.elo} />
               {tournamentStats.some((s) => s.champion_status) && (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">
-                  🏆 Şampiyon
-                </span>
+                <span className="text-xs px-2.5 py-1 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">🏆 Şampiyon</span>
               )}
               {tournamentStats.some((s) => s.best_speaker_status) && (
-                <span className="text-xs px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-400 border border-orange-500/30">
-                  🎙️ En İyi Konuşmacı
-                </span>
+                <span className="text-xs px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-400 border border-orange-500/30">🎙️ En İyi Konuşmacı</span>
+              )}
+              {careerBreaks > 0 && (
+                <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/30">⚡ {careerBreaks}x Break</span>
               )}
             </div>
           </div>
@@ -219,8 +343,8 @@ export default function SpeakerProfilePage() {
           <StatCard label="H2H Maç" value={totalH2H} />
           <StatCard
             label="Break Sayısı"
-            value={(speaker.br_count ?? 0)}
-            sub={(speaker.br_count ?? 0) > 0 ? `+${(speaker.br_bonus_total ?? 0)} Elo Bonus` : undefined}
+            value={careerBreaks}
+            sub={careerBreaks > 0 ? `+${totalBreakBonus} Elo Bonus` : undefined}
           />
         </div>
       </div>
@@ -235,18 +359,8 @@ export default function SpeakerProfilePage() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fill: "#6b7280", fontSize: 11 }}
-                  axisLine={{ stroke: "rgba(255,255,255,0.1)" }}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fill: "#6b7280", fontSize: 11 }}
-                  axisLine={false}
-                  tickLine={false}
-                  domain={["auto", "auto"]}
-                />
+                <XAxis dataKey="name" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={{ stroke: "rgba(255,255,255,0.1)" }} tickLine={false} />
+                <YAxis tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} domain={["auto", "auto"]} />
                 <Tooltip content={<CustomTooltip />} />
                 <ReferenceLine y={1000} stroke="rgba(255,255,255,0.1)" strokeDasharray="4 4" />
                 <Line
@@ -290,31 +404,22 @@ export default function SpeakerProfilePage() {
                     </div>
                     <div className="w-24 hidden sm:block">
                       <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all"
-                          style={{ width: `${winPct}%` }}
-                        />
+                        <div className="h-full rounded-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all" style={{ width: `${winPct}%` }} />
                       </div>
                     </div>
                     <div className={`text-xs font-mono w-10 text-right ${winPct >= 50 ? "text-green-400" : winPct > 0 ? "text-red-400" : "text-gray-500"}`}>
                       {winPct.toFixed(0)}%
                     </div>
                   </div>
-                  
-                  {/* Detailed Matches */}
                   <div className="pt-2 border-t border-white/5 space-y-1">
                     {record.matches.map((m, idx) => (
                       <div key={idx} className="flex justify-between text-[11px] text-gray-500">
                         <div className="truncate flex-1 pr-2">
-                           <span className="text-gray-400">{m.tournament}</span>
-                           <span className="mx-1 opacity-30">•</span>
-                           <span>{m.round}</span>
+                          <span className="text-gray-400">{m.tournament}</span>
+                          <span className="mx-1 opacity-30">•</span>
+                          <span>{m.round}</span>
                         </div>
-                        <div className={
-                          m.result === "Galibiyet" ? "text-green-500/70" : 
-                          m.result === "Beraberlik" ? "text-yellow-500/70" : 
-                          "text-red-500/70"
-                        }>
+                        <div className={m.result === "Galibiyet" ? "text-green-500/70" : m.result === "Beraberlik" ? "text-yellow-500/70" : "text-red-500/70"}>
                           {m.result}
                         </div>
                       </div>
@@ -324,8 +429,6 @@ export default function SpeakerProfilePage() {
               );
             })}
           </div>
-
-
         </div>
       )}
 
@@ -336,53 +439,52 @@ export default function SpeakerProfilePage() {
             <span>🏅</span> Turnuva Geçmişi
           </h2>
           <div className="space-y-3">
-            {tournamentStats.map((stat, i) => (
-              <div key={i} className="bg-white/3 rounded-xl px-4 py-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-white text-sm">
-                      {stat.tournaments?.name ?? "Bilinmeyen Turnuva"}
-                    </div>
-                    {stat.partner && (
-                      <div className="text-gray-500 text-xs mt-0.5">
-                        Partner: <span className="text-gray-400">{stat.partner.name}</span>
-                        <span className="ml-1 text-gray-600">({stat.partner.elo} ELO)</span>
+            {tournamentStats.map((stat: any, i) => {
+              const tId = stat.tournament_id ?? "";
+              const hasRoundLog = tId && roundLogsByTournament[tId]?.length > 0;
+              return (
+                <div key={i} className="bg-white/3 rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="font-medium text-white text-sm">
+                        {stat.tournaments?.name ?? "Bilinmeyen Turnuva"}
                       </div>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <div
-                      className={`text-sm font-bold font-mono ${
-                        (stat.elo_change + stat.carry_bonus) >= 0 ? "text-green-400" : "text-red-400"
-                      }`}
-                    >
-                      {stat.elo_change + stat.carry_bonus >= 0 ? "+" : ""}
-                      {stat.elo_change + stat.carry_bonus} ELO
+                      {stat.partner && (
+                        <div className="text-gray-500 text-xs mt-0.5">
+                          Partner: <span className="text-gray-400">{stat.partner.name}</span>
+                          <span className="ml-1 text-gray-600">({stat.partner.elo} ELO)</span>
+                        </div>
+                      )}
+                      <div className="text-gray-600 text-xs mt-0.5">
+                        Ort. Prelim SP: <span className="text-gray-400">{stat.speak_avg?.toFixed(1)}</span>
+                      </div>
                     </div>
-                    <div className="text-gray-500 text-xs">Avg: {stat.speak_avg?.toFixed(1)}</div>
+                    <div className="flex items-center gap-3">
+                      {hasRoundLog && (
+                        <button
+                          onClick={() => setAuditModal({ tournamentId: tId, tournamentName: stat.tournaments?.name ?? "Turnuva", breakStatus: stat.break_status })}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition"
+                        >
+                          📋 Dekont
+                        </button>
+                      )}
+                      <div className="text-right">
+                        <div className={`text-sm font-bold font-mono ${(stat.elo_change + stat.carry_bonus) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {stat.elo_change + stat.carry_bonus >= 0 ? "+" : ""}
+                          {stat.elo_change + stat.carry_bonus} ELO
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {stat.champion_status && <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">🏆 Şampiyon</span>}
+                    {stat.final_status && !stat.champion_status && <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 border border-orange-500/20">🥈 Finalist</span>}
+                    {stat.break_status && !stat.final_status && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">⚡ Break</span>}
+                    {stat.best_speaker_status && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/20">🎙️ En İyi Konuşmacı</span>}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {stat.champion_status && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">🏆 Şampiyon</span>
-                  )}
-                  {stat.final_status && !stat.champion_status && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 border border-orange-500/20">🥈 Finalist</span>
-                  )}
-                  {stat.break_status && !stat.final_status && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">⚡ Break</span>
-                  )}
-                  {stat.best_speaker_status && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/20">🎙️ En İyi Konuşmacı</span>
-                  )}
-                  {stat.carry_bonus > 0 && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/20">
-                      💪 Carry +{stat.carry_bonus}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -391,6 +493,16 @@ export default function SpeakerProfilePage() {
         <div className="glass rounded-2xl p-12 text-center text-gray-500">
           Bu konuşmacı için henüz turnuva verisi bulunmuyor.
         </div>
+      )}
+
+      {/* Audit Modal */}
+      {auditModal && (
+        <RoundAuditModal
+          tournamentName={auditModal.tournamentName}
+          rounds={openAuditRounds}
+          breakBonus={auditModal.breakStatus}
+          onClose={() => setAuditModal(null)}
+        />
       )}
     </div>
   );

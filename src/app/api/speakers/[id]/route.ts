@@ -39,22 +39,33 @@ export async function GET(
       .eq("loser_id", id)
       .or("is_tie.is.null,is_tie.eq.false");
 
-    // H2H ties (winner_id stores one side of the tie)
+    // H2H ties
     const { data: h2hTies } = await supabase
       .from("h2h_records")
       .select("*, loser:speakers!h2h_records_loser_id_fkey(name), winner:speakers!h2h_records_winner_id_fkey(name), tournaments(name)")
       .eq("is_tie", true)
       .or(`winner_id.eq.${id},loser_id.eq.${id}`);
 
-
     // Tournament stats with partner info
     const { data: tournamentStats } = await supabase
       .from("tournament_stats")
-      .select(
-        "*, tournaments(name, base_url), partner:speakers!tournament_stats_partner_id_fkey(name, elo)"
-      )
+      .select("*, tournament_id, tournaments(id, name, base_url), partner:speakers!tournament_stats_partner_id_fkey(name, elo)")
       .eq("speaker_id", id)
       .order("tournaments(created_at)", { ascending: false });
+
+    // Per-round Elo audit log (for tournament detail modal)
+    let roundLogs: any[] = [];
+    try {
+      const { data: rlData } = await supabase
+        .from("elo_round_log")
+        .select("*, tournaments(name)")
+        .eq("speaker_id", id)
+        .order("created_at", { ascending: true });
+      roundLogs = rlData || [];
+    } catch(e) {
+      // Table might not exist yet
+      console.log("elo_round_log not available");
+    }
 
     return NextResponse.json({
       speaker,
@@ -63,12 +74,10 @@ export async function GET(
       h2hLosses: h2hLosses || [],
       h2hTies: h2hTies || [],
       tournamentStats: tournamentStats || [],
+      roundLogs,
     });
   } catch (error) {
     console.error("Speaker profile error:", error);
-    return NextResponse.json(
-      { error: "Profil yüklenirken hata oluştu." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Profil yüklenirken hata oluştu." }, { status: 500 });
   }
 }
