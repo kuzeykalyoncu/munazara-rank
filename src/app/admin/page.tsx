@@ -836,6 +836,13 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  <a
+                    href={`/api/admin/export?tournamentId=${t.id}`}
+                    download
+                    className={`opacity-0 group-hover:opacity-100 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition text-xs font-semibold hidden sm:flex ${t.status !== "processed" ? "pointer-events-none opacity-0" : ""}`}
+                  >
+                    <span>📊</span> Excel İndir
+                  </a>
                   <button
                     onClick={() => handleSingleSync(t)}
                     disabled={loading || t.status === "processed"}

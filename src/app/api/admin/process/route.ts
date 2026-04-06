@@ -209,12 +209,26 @@ export async function POST(req: NextRequest) {
       }
 
       // Distribute deltas + build round log per speaker
+      // Pre-compute team elo averages (before this room's changes) for audit
+      const teamEloSnapshot: Record<string, number> = {};
+      for (const ts of teamStates) teamEloSnapshot[ts.name] = ts.elo;
+
       for (let ti = 0; ti < teamStates.length; ti++) {
         const t = teamStates[ti];
         const placement = ti + 1;
         const rawDelta = teamRawDeltas.get(t.name) || 0;
         const isOutroundFlag = room.isOutround || false;
         const roundLabel = room.name || (isOutroundFlag ? "Outround" : "Tur");
+        const teamEloBefore = teamEloSnapshot[t.name];
+        // rawDelta = SA - EA, so SA = rawDelta + EA
+        // We don't store matchup-level EA easily, but we can estimate team-level EA
+        // by averaging EA against all other teams (as processed in pairwise loop)
+        const otherTeams = teamStates.filter((_, idx) => idx !== ti);
+        const avgOtherElo = otherTeams.length > 0
+          ? otherTeams.reduce((s, ot) => s + teamEloSnapshot[ot.name], 0) / otherTeams.length
+          : teamEloBefore;
+        const estExpected = 1 / (1 + Math.pow(10, (avgOtherElo - teamEloBefore) / 400));
+        const estActual = Math.max(0, Math.min(1, rawDelta / Math.max(teamStates.length - 1, 1) + estExpected));
 
         if (t.speakers.length === 1) {
           const s = t.speakers[0];
@@ -243,6 +257,10 @@ export async function POST(req: NextRequest) {
             team_raw_delta: rawDelta, elo_change: change,
             elo_before: Math.round(eloBefore * 100) / 100,
             elo_after: Math.round(s.elo * 100) / 100,
+            k_factor: personalK,
+            team_elo_before: Math.round(teamEloBefore * 100) / 100,
+            expected_score: Math.round(estExpected * 10000) / 10000,
+            actual_score: Math.round(estActual * 10000) / 10000,
           });
 
         } else if (t.speakers.length >= 2) {
@@ -311,6 +329,10 @@ export async function POST(req: NextRequest) {
             team_raw_delta: rawDelta, elo_change: share1,
             elo_before: Math.round(elo_before_s1 * 100) / 100,
             elo_after: Math.round(s1.elo * 100) / 100,
+            k_factor: k1,
+            team_elo_before: Math.round(teamEloBefore * 100) / 100,
+            expected_score: Math.round(estExpected * 10000) / 10000,
+            actual_score: Math.round(estActual * 10000) / 10000,
           });
           roundLogInserts.push({
             speaker_id: s2.id, tournament_id: tournamentId,
@@ -323,7 +345,12 @@ export async function POST(req: NextRequest) {
             team_raw_delta: rawDelta, elo_change: share2,
             elo_before: Math.round(elo_before_s2 * 100) / 100,
             elo_after: Math.round(s2.elo * 100) / 100,
+            k_factor: k2,
+            team_elo_before: Math.round(teamEloBefore * 100) / 100,
+            expected_score: Math.round(estExpected * 10000) / 10000,
+            actual_score: Math.round(estActual * 10000) / 10000,
           });
+
         }
       }
 
