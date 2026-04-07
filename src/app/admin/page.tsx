@@ -7,6 +7,110 @@ import type { Tournament } from "@/lib/supabase";
 export type AliasItem = { name: string; tournaments: number };
 export type AliasCluster = { id: string; items: AliasItem[] };
 
+// ─── Editable Sheet Types ─────────────────────────────────────────────
+interface EditableSpeakerSlot { name: string; sp: number; }
+interface EditableTeamSlot { position: number; teamName: string; speakers: EditableSpeakerSlot[]; }
+interface EditableRoom { id: string; label: string; teams: EditableTeamSlot[]; }
+interface EditableRound { name: string; isOutround: boolean; rooms: EditableRoom[]; }
+interface EditableData {
+  tournamentName: string;
+  rounds: EditableRound[];
+  breakTeams: string[];
+  bestSpeakers: string[];
+  champions: string[];
+  finalists: string[];
+  inferredBreakCount: number;
+}
+
+function buildEditableData(preview: any): EditableData {
+  const { speakers, teams, results, tournamentName, inferredBreakCount } = preview;
+  const teamSpeakersMap: Record<string, string[]> = {};
+  for (const t of teams) teamSpeakersMap[t.name.toLowerCase()] = t.speakers;
+  const speakerScores: Record<string, number[]> = {};
+  for (const s of speakers) speakerScores[s.name] = s.scores || [];
+
+  // Group rooms by round name, preserving insertion order
+  const roundOrder: string[] = [];
+  const roundGroups: Record<string, { isOutround: boolean; rooms: any[] }> = {};
+  for (const room of (results.rooms || [])) {
+    const key = room.name || "Tur";
+    if (!roundGroups[key]) { roundGroups[key] = { isOutround: !!room.isOutround, rooms: [] }; roundOrder.push(key); }
+    roundGroups[key].rooms.push(room);
+  }
+
+  // Determine prelim index: for each prelim round in order, assign 0,1,2...
+  let prelIdx = 0;
+  const roundPrelimIdx: Record<string, number> = {};
+  for (const rn of roundOrder) {
+    if (!roundGroups[rn].isOutround) { roundPrelimIdx[rn] = prelIdx++; }
+    else roundPrelimIdx[rn] = -1;
+  }
+
+  const rounds: EditableRound[] = roundOrder.map(rn => {
+    const group = roundGroups[rn];
+    const scoreIdx = roundPrelimIdx[rn];
+    const editRooms: EditableRoom[] = group.rooms.map((room, ri) => {
+      const editTeams: EditableTeamSlot[] = (room.placements || []).map((tName: string, pos: number) => {
+        const spNames = teamSpeakersMap[tName.toLowerCase()] || [];
+        const editSpeakers: EditableSpeakerSlot[] = spNames.map(spName => ({
+          name: spName,
+          sp: scoreIdx >= 0 ? (speakerScores[spName]?.[scoreIdx] ?? 0) : 0,
+        }));
+        return { position: pos + 1, teamName: tName, speakers: editSpeakers };
+      });
+      return { id: `${rn}-${ri}`, label: room.name || `Salon ${ri + 1}`, teams: editTeams };
+    });
+    return { name: rn, isOutround: group.isOutround, rooms: editRooms };
+  });
+
+  return {
+    tournamentName,
+    rounds,
+    breakTeams: results.breaks || [],
+    bestSpeakers: results.bestSpeakers || [],
+    champions: results.champions || [],
+    finalists: results.finalists || [],
+    inferredBreakCount: inferredBreakCount || 0,
+  };
+}
+
+function reconstructScrapeData(editData: EditableData, original: any): any {
+  // Rebuild speaker scores from edited SP values
+  const speakerScoresMap: Record<string, number[]> = {};
+  let prelIdx = 0;
+  for (const round of editData.rounds) {
+    if (!round.isOutround) {
+      for (const room of round.rooms) {
+        for (const team of room.teams) {
+          for (const sp of team.speakers) {
+            if (!speakerScoresMap[sp.name]) speakerScoresMap[sp.name] = [];
+            speakerScoresMap[sp.name][prelIdx] = sp.sp;
+          }
+        }
+      }
+      prelIdx++;
+    }
+  }
+  const updatedSpeakers = original.speakers.map((sp: any) => ({
+    ...sp,
+    scores: speakerScoresMap[sp.name] ?? sp.scores,
+    totalPoints: (speakerScoresMap[sp.name] ?? sp.scores ?? []).reduce((a: number, b: number) => a + b, 0),
+  }));
+  const updatedRooms = editData.rounds.flatMap(round =>
+    round.rooms.map(room => ({
+      name: round.name,
+      placements: [...room.teams].sort((a, b) => a.position - b.position).map(t => t.teamName),
+      isOutround: round.isOutround,
+    }))
+  );
+  return {
+    ...original,
+    speakers: updatedSpeakers,
+    results: { ...original.results, rooms: updatedRooms, breaks: editData.breakTeams,
+      bestSpeakers: editData.bestSpeakers, champions: editData.champions, finalists: editData.finalists },
+  };
+}
+
 function EloTag({ elo }: { elo: number }) {
   let color = "text-gray-400 border-gray-600";
   if (elo >= 1200) color = "text-violet-400 border-violet-500 bg-violet-500/10";
@@ -224,6 +328,11 @@ export default function AdminPage() {
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
   const [processPreview, setProcessPreview] = useState<any[] | null>(null);
   const [overrideBreaks, setOverrideBreaks] = useState<Record<string, boolean>>({});
+  // Editable sheet
+  const [showBreakDialog, setShowBreakDialog] = useState(false);
+  const [breakCountInput, setBreakCountInput] = useState("");
+  const [editableData, setEditableData] = useState<EditableData | null>(null);
+  const [activeRoundTab, setActiveRoundTab] = useState(0);
 
   async function handleScrape(e?: React.FormEvent, url?: string, bCount?: string) {
     if (e) e.preventDefault();
@@ -248,6 +357,9 @@ export default function AdminPage() {
       }
 
       setScrapePreview(data);
+      // Trigger break-count dialog instead of processing immediately
+      setShowBreakDialog(true);
+      setBreakCountInput(String(data.inferredBreakCount || ""));
       
       // Save tournament to DB
       const cleanUrl = targetUrl.endsWith("/") ? targetUrl : targetUrl + "/";
@@ -277,10 +389,10 @@ export default function AdminPage() {
   }
 
   async function handlePreview() {
-    if (!scrapePreview || !currentTournamentId) {
-      setStatus("❌ Önce turnuvayı tarayın.");
-      return;
-    }
+    if (!currentTournamentId) { setStatus("❌ Önce turnuvayı tarayın."); return; }
+    // Use editableData if available, else fallback to raw scrapePreview
+    const dataToUse = editableData && scrapePreview ? reconstructScrapeData(editableData, scrapePreview) : scrapePreview;
+    if (!dataToUse) { setStatus("❌ Veri bulunamadı."); return; }
     setLoading(true);
     setStatus("🔍 Önizleme hesaplanıyor...");
     try {
@@ -289,20 +401,17 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tournamentId: currentTournamentId,
-          speakers: scrapePreview.speakers,
-          teams: scrapePreview.teams,
-          results: scrapePreview.results,
-          breakCount: breakCount || scrapePreview.inferredBreakCount,
+          speakers: dataToUse.speakers,
+          teams: dataToUse.teams,
+          results: dataToUse.results,
+          breakCount: breakCountInput || breakCount || dataToUse.inferredBreakCount,
           dryRun: true,
         }),
       });
       const data = await res.json();
       if (!res.ok) { setStatus(`❌ Önizleme hatası: ${data.error}`); return; }
-      // Initialize overrideBreaks with detected values
       const initial: Record<string, boolean> = {};
-      for (const sp of data.speakers || []) {
-        initial[sp.speakerId] = sp.didBreak;
-      }
+      for (const sp of data.speakers || []) initial[sp.speakerId] = sp.didBreak;
       setOverrideBreaks(initial);
       setProcessPreview(data.speakers || []);
       setStatus("✅ Önizleme hazır. Break tespitlerini kontrol edin ve onaylayın.");
@@ -311,7 +420,9 @@ export default function AdminPage() {
   }
 
   async function handleFinalize() {
-    if (!scrapePreview || !currentTournamentId) return;
+    if (!currentTournamentId) return;
+    const dataToUse = editableData && scrapePreview ? reconstructScrapeData(editableData, scrapePreview) : scrapePreview;
+    if (!dataToUse) return;
     setLoading(true);
     setStatus("⚙️ ELO hesaplanıyor ve kaydediliyor...");
     try {
@@ -320,10 +431,10 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tournamentId: currentTournamentId,
-          speakers: scrapePreview.speakers,
-          teams: scrapePreview.teams,
-          results: scrapePreview.results,
-          breakCount: breakCount || scrapePreview.inferredBreakCount,
+          speakers: dataToUse.speakers,
+          teams: dataToUse.teams,
+          results: dataToUse.results,
+          breakCount: breakCountInput || breakCount || dataToUse.inferredBreakCount,
           dryRun: false,
           overrideBreaks,
         }),
@@ -331,12 +442,9 @@ export default function AdminPage() {
       const data = await res.json();
       if (!res.ok) { setStatus(`❌ İşlem hatası: ${data.error}`); return; }
       setStatus(`🏆 İşlendi! ${data.processed} konuşmacı güncellendi.`);
-      setScrapePreview(null);
-      setProcessPreview(null);
-      setOverrideBreaks({});
-      setTournamentUrl("");
-      setBreakCount("");
-      setCurrentTournamentId(null);
+      setScrapePreview(null); setProcessPreview(null); setOverrideBreaks({});
+      setEditableData(null); setActiveRoundTab(0); setBreakCountInput("");
+      setTournamentUrl(""); setBreakCount(""); setCurrentTournamentId(null);
       loadTournaments();
     } catch { setStatus("❌ İşlem sırasında hata oluştu."); }
     finally { setLoading(false); }
@@ -595,176 +703,369 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* Scrape Preview */}
-      {scrapePreview && (
-        <div className="glass rounded-2xl p-6 space-y-6 border-indigo-500/20">
-          <div className="flex items-center justify-between">
+      {/* ── Break Count Dialog ── */}
+      {showBreakDialog && scrapePreview && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass rounded-2xl p-8 w-full max-w-sm glow-indigo text-center space-y-6">
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-3xl mx-auto shadow-lg shadow-indigo-500/40">⚡</div>
             <div>
-              <h2 className="text-lg font-semibold text-white">
-                📋 Önizleme: {scrapePreview.tournamentName}
+              <h3 className="text-xl font-bold text-white">{scrapePreview.tournamentName}</h3>
+              <p className="text-gray-400 text-sm mt-1">Bu turnuvada kaç takım break yaptı?</p>
+            </div>
+            {(scrapePreview.inferredBreakCount || 0) > 0 && (
+              <p className="text-indigo-300 text-xs bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-3 py-2">
+                🤖 Sistem {scrapePreview.inferredBreakCount} takımın break yaptığını otomatik tespit etti.
+              </p>
+            )}
+            <input
+              type="number" min="0" max="128" autoFocus
+              value={breakCountInput}
+              onChange={e => setBreakCountInput(e.target.value)}
+              className="w-full bg-white/5 border border-indigo-500/40 rounded-xl px-4 py-3 text-white text-center text-2xl font-bold placeholder-gray-600 focus:outline-none focus:border-indigo-400 transition"
+              placeholder="0"
+              onKeyDown={e => { if (e.key === "Enter") { setShowBreakDialog(false); setEditableData(buildEditableData(scrapePreview)); setActiveRoundTab(0); } }}
+            />
+            <div className="flex gap-3">
+              <button onClick={() => { setShowBreakDialog(false); setScrapePreview(null); setBreakCountInput(""); }}
+                className="flex-1 py-2.5 rounded-xl bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition text-sm">
+                İptal
+              </button>
+              <button onClick={() => { setShowBreakDialog(false); setEditableData(buildEditableData(scrapePreview)); setActiveRoundTab(0); }}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold hover:from-indigo-500 hover:to-violet-500 transition-all shadow-lg shadow-indigo-500/30 active:scale-95">
+                Devam →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Editable Tournament Sheet ── */}
+      {editableData && !processPreview && (
+        <div className="glass rounded-2xl overflow-hidden border border-indigo-500/20">
+          {/* Header */}
+          <div className="px-6 py-4 bg-indigo-500/10 border-b border-indigo-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <span>📝</span> {editableData.tournamentName}
+                <span className="text-xs font-normal text-indigo-400 bg-indigo-500/15 border border-indigo-500/20 px-2 py-0.5 rounded-full">Düzenleme Modu</span>
               </h2>
-              <p className="text-gray-400 text-sm mt-0.5">
-                Veritabanına kaydetmeden önce kontrol edin
+              <p className="text-gray-500 text-xs mt-0.5">
+                Konuşmacı puanlarını, salon sıralamasını ve break takımlarını düzenleyin, ardından ELO hesaplayın.
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => { setScrapePreview(null); setProcessPreview(null); setOverrideBreaks({}); }}
-                className="px-4 py-2 rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition text-sm"
-              >
+              <button onClick={() => { setEditableData(null); setScrapePreview(null); setProcessPreview(null); setBreakCountInput(""); }}
+                className="px-3 py-2 rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition text-sm">
                 ✕ İptal
               </button>
-              {!processPreview ? (
-                <button
-                  onClick={handlePreview}
-                  disabled={loading}
-                  className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold hover:from-indigo-500 hover:to-violet-500 transition-all shadow-lg shadow-indigo-500/30 disabled:opacity-50 active:scale-95 whitespace-nowrap"
-                >
-                  {loading ? "Hesaplanıyor..." : "🔍 Önizle & Break Kontrol Et"}
-                </button>
-              ) : (
-                <button
-                  onClick={handleFinalize}
-                  disabled={loading}
-                  className="px-6 py-2.5 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold hover:from-green-500 hover:to-emerald-500 transition-all shadow-lg shadow-green-500/30 disabled:opacity-50 active:scale-95 whitespace-nowrap"
-                >
-                  {loading ? "Kaydediliyor..." : "✅ Onayla & Kaydet"}
-                </button>
-              )}
+              <button onClick={handlePreview} disabled={loading}
+                className="px-5 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold hover:from-indigo-500 hover:to-violet-500 transition-all shadow-lg shadow-indigo-500/30 disabled:opacity-50 text-sm">
+                {loading ? "Hesaplanıyor..." : "🔍 ELO Önizle"}
+              </button>
             </div>
           </div>
 
-          {((scrapePreview.inferredBreakCount || 0) > 0) && !breakCount && (
-            <div className="bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 px-4 py-3 rounded-lg text-sm">
-              <strong className="flex items-center gap-1.5 mb-1">
-                <span className="text-lg">🤖</span> Otomatik Tespit
-              </strong>
-              <p className="mt-1 text-indigo-200/80">
-                Bu turnuvada <strong>{scrapePreview.inferredBreakCount}</strong> takımın break yaptığı algılandı ve ELO hesaplamasına dahil edilecektir. Eğer bu sayı yanlışsa, yukarıdaki <strong>Break Sayısı</strong> kutucuğuna manuel olarak doğru sayıyı girip doğrudan ELO&apos;ları Hesapla butonuna basabilirsiniz.
-              </p>
-            </div>
-          )}
-
-          {scrapePreview.warnings && scrapePreview.warnings.length > 0 && (
-            <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 px-4 py-3 rounded-lg text-sm">
-              <strong className="flex items-center gap-1.5 mb-1">
-                <span className="text-lg">⚠️</span> Uyarılar (Erişilemeyen Turlar)
-              </strong>
-              <ul className="list-disc pl-5 space-y-0.5 mt-1.5 text-xs text-yellow-200/80">
-                {scrapePreview.warnings.map((w, i) => <li key={i}>{w}</li>)}
-              </ul>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-            <div className="bg-white/5 rounded-xl p-4">
-              <div className="text-3xl font-bold text-indigo-400">
-                {scrapePreview.speakers.length}
-              </div>
-              <div className="text-gray-400 text-sm mt-1">Konuşmacı</div>
-            </div>
-            <div className="bg-white/5 rounded-xl p-4">
-              <div className="text-3xl font-bold text-violet-400">
-                {scrapePreview.teams.length}
-              </div>
-              <div className="text-gray-400 text-sm mt-1">Takım</div>
-            </div>
-            <div className="bg-white/5 rounded-xl p-4">
-              <div className="text-3xl font-bold text-green-400">
-                {scrapePreview.results.breaks.length}
-              </div>
-              <div className="text-gray-400 text-sm mt-1">Break Yapan</div>
-            </div>
+          {/* Break count strip */}
+          <div className="px-6 py-2 bg-black/20 border-b border-white/5 flex items-center gap-3 text-sm">
+            <span className="text-gray-500">⚡ Break Sayısı:</span>
+            <input type="number" min="0" max="128" value={breakCountInput}
+              onChange={e => {
+                setBreakCountInput(e.target.value);
+                // Recompute break teams in editableData
+                const cnt = Number(e.target.value);
+                if (!isNaN(cnt) && scrapePreview) {
+                  const topTeams = scrapePreview.teams.slice(0, cnt).map((t: any) => t.name.toLowerCase());
+                  setEditableData(prev => prev ? { ...prev, breakTeams: topTeams } : prev);
+                }
+              }}
+              className="w-20 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-white text-center font-mono focus:outline-none focus:border-indigo-500 transition"
+            />
+            <span className="text-gray-600 text-xs">Takım sayısı (Break Yapanlar sekmesinden de düzenleyebilirsiniz)</span>
           </div>
 
-          {/* Speakers preview */}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-              Konuşmacılar (ilk 10)
-            </h3>
-            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-              {scrapePreview.speakers.slice(0, 10).map((sp, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between bg-white/3 rounded-lg px-3 py-2 text-sm"
-                >
-                  <span className="text-white">{sp.name}</span>
-                  <span className="text-indigo-400 font-mono">
-                    {sp.totalPoints.toFixed(1)} pts
-                  </span>
-                </div>
-              ))}
-            </div>
+          {/* Round tab bar */}
+          <div className="flex overflow-x-auto border-b border-white/10 bg-black/10">
+            {editableData.rounds.map((r, ri) => (
+              <button key={ri} onClick={() => setActiveRoundTab(ri)}
+                className={`px-4 py-3 text-sm whitespace-nowrap transition border-b-2 font-medium ${
+                  activeRoundTab === ri
+                    ? "border-indigo-500 text-indigo-300 bg-indigo-500/10"
+                    : "border-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5"
+                }`}>
+                {r.isOutround ? "🏆 " : "#"}{ri + 1} {r.name}
+              </button>
+            ))}
+            <button onClick={() => setActiveRoundTab(editableData.rounds.length)}
+              className={`px-4 py-3 text-sm whitespace-nowrap transition border-b-2 font-medium ${
+                activeRoundTab === editableData.rounds.length
+                  ? "border-green-500 text-green-300 bg-green-500/10"
+                  : "border-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5"
+              }`}>⚡ Break Yapanlar</button>
+            <button onClick={() => setActiveRoundTab(editableData.rounds.length + 1)}
+              className={`px-4 py-3 text-sm whitespace-nowrap transition border-b-2 font-medium ${
+                activeRoundTab === editableData.rounds.length + 1
+                  ? "border-purple-500 text-purple-300 bg-purple-500/10"
+                  : "border-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5"
+              }`}>🎙️ Konuşmacılar</button>
           </div>
 
-          {/* Teams preview */}
-          {scrapePreview.teams.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                Takımlar (ilk 8)
-              </h3>
-              <div className="grid grid-cols-2 gap-2">
-                {scrapePreview.teams.slice(0, 8).map((t, i) => (
-                  <div
-                    key={i}
-                    className="bg-white/3 rounded-lg px-3 py-2 text-sm"
-                  >
-                    <div className="text-gray-400 text-xs">{t.name}</div>
-                    <div className="text-white">
-                      {t.speakers.join(" & ")}
-                    </div>
+          {/* ── ROUND TAB ── */}
+          {activeRoundTab < editableData.rounds.length && (() => {
+            const round = editableData.rounds[activeRoundTab];
+            return (
+              <div className="p-4 space-y-4 max-h-[65vh] overflow-y-auto">
+                {round.isOutround && (
+                  <div className="bg-orange-500/10 border border-orange-500/20 text-orange-300 px-4 py-2 rounded-lg text-xs">
+                    🏆 Bu bir eleme turu. SP verileri Elo hesaplamasına dahil edilmez.
                   </div>
-                ))}
+                )}
+                {round.rooms.map((room, roomIdx) => {
+                  const spDiffs: number[] = room.teams.map(t => {
+                    if (t.speakers.length < 2) return 0;
+                    return Math.abs(t.speakers[0].sp - t.speakers[1].sp);
+                  });
+                  const maxDiff = Math.max(...spDiffs);
+                  return (
+                    <div key={room.id} className="bg-white/3 rounded-xl overflow-hidden border border-white/5">
+                      {/* Salon header */}
+                      <div className="flex items-center gap-3 px-4 py-2.5 bg-white/5 border-b border-white/5">
+                        <span className="text-gray-500 text-xs">Salon:</span>
+                        <input value={room.label} onChange={e => {
+                          const v = e.target.value;
+                          setEditableData(prev => { if (!prev) return prev;
+                            const nd = { ...prev, rounds: [...prev.rounds] };
+                            nd.rounds[activeRoundTab] = { ...round, rooms: round.rooms.map((r, ri) => ri === roomIdx ? { ...r, label: v } : r) };
+                            return nd; });
+                        }} className="bg-transparent text-white text-sm font-medium focus:outline-none border-b border-transparent focus:border-indigo-500 transition px-1 min-w-0 w-40" />
+                        <span className="ml-auto text-xs text-gray-600">{room.teams.length} takım</span>
+                      </div>
+                      {/* Team rows */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-gray-600 uppercase tracking-wider border-b border-white/5">
+                              <th className="px-3 py-2 text-center w-8">Sıra</th>
+                              <th className="px-3 py-2 text-left">Takım</th>
+                              <th className="px-3 py-2 text-center">Konuşmacı 1</th>
+                              <th className="px-3 py-2 text-center">SP</th>
+                              <th className="px-3 py-2 text-center">Konuşmacı 2</th>
+                              <th className="px-3 py-2 text-center">SP</th>
+                              <th className="px-3 py-2 text-center">Toplam</th>
+                              <th className="px-3 py-2 text-center">Fark</th>
+                              <th className="px-3 py-2 text-center w-14">Sıra↕</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...room.teams].sort((a, b) => a.position - b.position).map((team, ti) => {
+                              const total = team.speakers.reduce((s, sp) => s + sp.sp, 0);
+                              const diff = team.speakers.length >= 2 ? Math.abs(team.speakers[0].sp - team.speakers[1].sp) : 0;
+                              const posEmoji = ["🥇", "🥈", "🥉", "4."][Math.min(team.position - 1, 3)];
+                              const updateSp = (spIdx: number, val: number) => {
+                                setEditableData(prev => { if (!prev) return prev;
+                                  const nd = { ...prev, rounds: [...prev.rounds] };
+                                  nd.rounds[activeRoundTab] = { ...round, rooms: round.rooms.map((r, ri) => ri === roomIdx ? { ...r, teams: r.teams.map(t => t.position === team.position ? { ...t, speakers: t.speakers.map((s, si) => si === spIdx ? { ...s, sp: val } : s) } : t) } : r) };
+                                  return nd; });
+                              };
+                              const moveTeam = (dir: -1 | 1) => {
+                                setEditableData(prev => { if (!prev) return prev;
+                                  const nd = { ...prev, rounds: [...prev.rounds] };
+                                  const updRooms = round.rooms.map((r, ri) => {
+                                    if (ri !== roomIdx) return r;
+                                    const sorted = [...r.teams].sort((a, b) => a.position - b.position);
+                                    const idx = sorted.findIndex(t => t.position === team.position);
+                                    const swapIdx = idx + dir;
+                                    if (swapIdx < 0 || swapIdx >= sorted.length) return r;
+                                    const newTeams = sorted.map((t, i) => {
+                                      if (i === idx) return { ...t, position: sorted[swapIdx].position };
+                                      if (i === swapIdx) return { ...t, position: sorted[idx].position };
+                                      return t;
+                                    });
+                                    return { ...r, teams: newTeams };
+                                  });
+                                  nd.rounds[activeRoundTab] = { ...round, rooms: updRooms };
+                                  return nd; });
+                              };
+                              return (
+                                <tr key={team.position} className={`border-b border-white/5 ${team.position === 1 ? "bg-yellow-500/5" : team.position === 4 ? "bg-red-500/5" : ""}` }>
+                                  <td className="px-3 py-2.5 text-center font-bold text-sm">{posEmoji}</td>
+                                  <td className="px-3 py-2.5 font-medium text-white max-w-[120px] truncate">{team.teamName}</td>
+                                  <td className="px-3 py-2.5 text-center text-gray-400">{team.speakers[0]?.name ?? "—"}</td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    {!round.isOutround ? (
+                                      <input type="number" min="0" max="1000" value={team.speakers[0]?.sp ?? 0}
+                                        onChange={e => updateSp(0, Number(e.target.value))}
+                                        className="w-16 bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-center font-mono text-xs focus:outline-none focus:border-indigo-500" />
+                                    ) : <span className="text-gray-600">—</span>}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center text-gray-400">{team.speakers[1]?.name ?? "—"}</td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    {!round.isOutround ? (
+                                      <input type="number" min="0" max="1000" value={team.speakers[1]?.sp ?? 0}
+                                        onChange={e => updateSp(1, Number(e.target.value))}
+                                        className="w-16 bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-center font-mono text-xs focus:outline-none focus:border-indigo-500" />
+                                    ) : <span className="text-gray-600">—</span>}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center font-mono font-bold text-indigo-400">{!round.isOutround ? total : "—"}</td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    {!round.isOutround && (
+                                      <span className={`font-mono text-xs font-bold px-1.5 py-0.5 rounded ${ diff > 1 ? "text-blue-400 bg-blue-500/15" : "text-purple-400 bg-purple-500/15" }`}>
+                                        {diff > 1 ? `▲${diff}` : diff === 0 ? "0" : `${diff}` }
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    <div className="flex flex-col gap-0.5 items-center">
+                                      <button onClick={() => moveTeam(-1)} className="text-gray-600 hover:text-white text-xs leading-none transition">▲</button>
+                                      <button onClick={() => moveTeam(1)} className="text-gray-600 hover:text-white text-xs leading-none transition">▼</button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* SP diff analysis */}
+                      {!round.isOutround && maxDiff > 1 && (
+                        <div className="px-4 py-2 border-t border-white/5 text-xs text-blue-400/70">
+                          📊 En yüksek SP farkı: <strong className="text-blue-400">{maxDiff}</strong> puan → Performans Modu tetiklendi
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
+            );
+          })()}
+
+          {/* ── BREAK TEAMS TAB ── */}
+          {activeRoundTab === editableData.rounds.length && (
+            <div className="p-4 space-y-3 max-h-[65vh] overflow-y-auto">
+              <p className="text-gray-500 text-xs">Break yapan takımları işaretleyin. Seçili takım üyelerine +5 Elo break bonusu verilir.</p>
+              {scrapePreview?.teams?.map((t: any, ti: number) => {
+                const isBreak = editableData.breakTeams.some(b => b === t.name.toLowerCase() || b.includes(t.name.toLowerCase()) || t.name.toLowerCase().includes(b));
+                return (
+                  <div key={ti} onClick={() => {
+                    setEditableData(prev => {
+                      if (!prev) return prev;
+                      const tl = t.name.toLowerCase();
+                      const already = prev.breakTeams.includes(tl);
+                      return { ...prev, breakTeams: already ? prev.breakTeams.filter(b => b !== tl) : [...prev.breakTeams, tl] };
+                    });
+                  }} className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition ${
+                    isBreak ? "border-green-500/30 bg-green-500/10" : "border-white/5 bg-white/3 hover:bg-white/5"
+                  }`}>
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition ${
+                      isBreak ? "border-green-500 bg-green-500" : "border-gray-600 bg-transparent"
+                    }`}>{isBreak && <span className="text-white text-xs font-bold">✓</span>}</div>
+                    <div className="flex-1">
+                      <div className="text-white text-sm font-medium">{t.name}</div>
+                      <div className="text-gray-500 text-xs">{t.speakers?.join(" & ")}</div>
+                    </div>
+                    {isBreak && <span className="text-green-400 text-xs px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/20">+5 Elo</span>}
+                  </div>
+                );
+              })}
             </div>
           )}
-          {/* Process Preview Table — Break Toggle */}
-          {processPreview && (
-            <div className="bg-white/3 border border-indigo-500/20 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 bg-indigo-500/10 border-b border-indigo-500/20 flex items-center gap-2">
-                <span className="text-lg">📊</span>
-                <span className="text-sm font-semibold text-indigo-300">Elo Önizleme — Break tespitlerini düzeltin</span>
-              </div>
-              <div className="overflow-x-auto">
+
+          {/* ── SPEAKERS TAB ── */}
+          {activeRoundTab === editableData.rounds.length + 1 && (() => {
+            const allSpeakers = scrapePreview?.speakers ?? [];
+            const prelims = editableData.rounds.filter(r => !r.isOutround);
+            // Compute total SP per speaker from editable data
+            const computedSP: Record<string, number> = {};
+            for (const round of prelims) {
+              for (const room of round.rooms) {
+                for (const team of room.teams) {
+                  for (const sp of team.speakers) {
+                    computedSP[sp.name] = (computedSP[sp.name] ?? 0) + sp.sp;
+                  }
+                }
+              }
+            }
+            const sorted = [...allSpeakers].sort((a: any, b: any) => (computedSP[b.name] ?? 0) - (computedSP[a.name] ?? 0));
+            return (
+              <div className="max-h-[65vh] overflow-y-auto">
                 <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-white/10 text-gray-500 uppercase tracking-wider">
-                      <th className="px-3 py-2 text-left">Konuşmacı</th>
-                      <th className="px-3 py-2 text-right">Avg Prelim SP</th>
-                      <th className="px-3 py-2 text-right">Elo Değişimi</th>
-                      <th className="px-3 py-2 text-right">Elo Sonrası</th>
-                      <th className="px-3 py-2 text-center">Break ✓</th>
+                  <thead className="sticky top-0 bg-[#0f172a] border-b border-white/10">
+                    <tr className="text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-2.5 text-left">#</th>
+                      <th className="px-4 py-2.5 text-left">Konuşmacı</th>
+                      <th className="px-4 py-2.5 text-right">Toplam Prelim SP</th>
+                      <th className="px-4 py-2.5 text-right">Tur Sayısı</th>
+                      <th className="px-4 py-2.5 text-right">Ort. SP</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {processPreview.map((sp: any) => (
-                      <tr key={sp.speakerId} className="border-b border-white/5 hover:bg-white/3">
-                        <td className="px-3 py-2 font-medium text-white">{sp.name}</td>
-                        <td className="px-3 py-2 text-right text-gray-400">{sp.prelimSpeakAvg > 0 ? sp.prelimSpeakAvg.toFixed(1) : '—'}</td>
-                        <td className={`px-3 py-2 text-right font-mono font-bold ${sp.eloChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {sp.eloChange >= 0 ? '+' : ''}{sp.eloChange}
-                        </td>
-                        <td className="px-3 py-2 text-right text-gray-400 font-mono">{sp.eloAfter}</td>
-                        <td className="px-3 py-2 text-center">
-                          <button
-                            onClick={() => setOverrideBreaks(prev => ({ ...prev, [sp.speakerId]: !prev[sp.speakerId] }))}
-                            className={`w-8 h-5 rounded-full transition-colors relative ${
-                              overrideBreaks[sp.speakerId] ? 'bg-green-500' : 'bg-white/10'
-                            }`}
-                          >
-                            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${
-                              overrideBreaks[sp.speakerId] ? 'left-3.5' : 'left-0.5'
-                            }`} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {sorted.map((sp: any, idx: number) => {
+                      const total = computedSP[sp.name] ?? 0;
+                      const tourCount = prelims.reduce((cnt, r) => cnt + r.rooms.filter(room => room.teams.some(t => t.speakers.some(s => s.name === sp.name))).length, 0);
+                      return (
+                        <tr key={sp.name} className={`border-b border-white/5 ${ idx % 2 === 0 ? "bg-white/2" : "" } hover:bg-white/5`}>
+                          <td className="px-4 py-2.5 text-gray-600">{idx + 1}</td>
+                          <td className="px-4 py-2.5 font-medium text-white">{sp.name}</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-indigo-400 font-bold">{total}</td>
+                          <td className="px-4 py-2.5 text-right text-gray-500">{tourCount}</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-gray-400">{tourCount > 0 ? (total / tourCount).toFixed(1) : "—"}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
+            );
+          })()}
+        </div>
+      )}
 
+      {/* ── Process Preview Table (Break Toggle) — shown after handlePreview ── */}
+      {editableData && processPreview && (
+        <div className="glass rounded-2xl overflow-hidden border border-indigo-500/20">
+          <div className="px-6 py-4 bg-indigo-500/10 border-b border-indigo-500/20 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📊</span>
+              <span className="font-semibold text-indigo-300">Elo Önizleme — Break tespitlerini düzeltin</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setProcessPreview(null)} className="px-3 py-1.5 text-xs rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition">← Geri</button>
+              <button onClick={handleFinalize} disabled={loading}
+                className="px-5 py-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold hover:from-green-500 hover:to-emerald-500 transition-all shadow-lg shadow-green-500/30 disabled:opacity-50 text-sm">
+                {loading ? "Kaydediliyor..." : "✅ Onayla & Kaydet"}
+              </button>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/10 text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-2 text-left">Konuşmacı</th>
+                  <th className="px-3 py-2 text-right">Avg Prelim SP</th>
+                  <th className="px-3 py-2 text-right">Elo Değişimi</th>
+                  <th className="px-3 py-2 text-right">Elo Sonrası</th>
+                  <th className="px-3 py-2 text-center">Break ✓</th>
+                </tr>
+              </thead>
+              <tbody>
+                {processPreview.map((sp: any) => (
+                  <tr key={sp.speakerId} className="border-b border-white/5 hover:bg-white/3">
+                    <td className="px-3 py-2 font-medium text-white">{sp.name}</td>
+                    <td className="px-3 py-2 text-right text-gray-400">{sp.prelimSpeakAvg > 0 ? sp.prelimSpeakAvg.toFixed(1) : "—"}</td>
+                    <td className={`px-3 py-2 text-right font-mono font-bold ${sp.eloChange >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {sp.eloChange >= 0 ? "+" : ""}{sp.eloChange}
+                    </td>
+                    <td className="px-3 py-2 text-right text-gray-400 font-mono">{sp.eloAfter}</td>
+                    <td className="px-3 py-2 text-center">
+                      <button onClick={() => setOverrideBreaks(prev => ({ ...prev, [sp.speakerId]: !prev[sp.speakerId] }))}
+                        className={`w-8 h-5 rounded-full transition-colors relative ${overrideBreaks[sp.speakerId] ? "bg-green-500" : "bg-white/10"}`}>
+                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${overrideBreaks[sp.speakerId] ? "left-3.5" : "left-0.5"}`} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
