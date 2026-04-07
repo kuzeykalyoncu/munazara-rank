@@ -162,7 +162,10 @@ export async function POST(req: NextRequest) {
       for (const tName of room.placements) {
         const spNames = teamToSpeakers[tName.toLowerCase()] || [];
         const sps = spNames.map(n => speakerMap[n]).filter(Boolean);
-        if (sps.length === 0) continue;
+        if (sps.length === 0) {
+          console.warn(`[Room eşleşme hatası] Takım "${tName}" için konuşmacı bulunamadı. teamToSpeakers anahtarları: ${Object.keys(teamToSpeakers).join(", ")}`);
+          continue;
+        }
         teamStates.push({ name: tName, elo: sps.reduce((s, x) => s + x.elo, 0) / sps.length, speakers: sps });
       }
       if (teamStates.length < 2) continue;
@@ -253,7 +256,8 @@ export async function POST(req: NextRequest) {
           const s = t.speakers[0];
           s.matchCount += 1;
           const personalK = getKFactor(s.matchCount - 1);
-          const change = personalK * rawDelta * 2;
+          const normalizedDelta = rawDelta / Math.max(teamStates.length - 1, 1);
+          const change = personalK * normalizedDelta * 2;
           const eloBefore = s.elo;
           s.elo += change;
           s.eloChange += change;
@@ -308,11 +312,13 @@ export async function POST(req: NextRequest) {
           const sumElo = s1.elo + s2.elo;
           // TUR BAZLI dağıtım modu: her turda SP farkına bak
           const spDiff = Math.abs(sp1 - sp2);
+          // Normalize rawDelta to [-1, +1] range for 4-team BP (divide by number of opponents)
+          const normalizedDelta = rawDelta / Math.max(teamStates.length - 1, 1);
           // SP fark > 1 → Performans (ancak outround'da SP yoksa fark 0 → Gelişim/Kayıp modu)
           let mult1 = 0.5, mult2 = 0.5;
           let distributionMode = "gelisim";
 
-          if (rawDelta > 0) {
+          if (normalizedDelta > 0) {
             if (spDiff > 1) {
               // Performans Ödülü: Elo ile Doğru Orantılı
               mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
@@ -324,7 +330,7 @@ export async function POST(req: NextRequest) {
               mult2 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
               distributionMode = isOutroundFlag ? "outround-gelisim" : "gelisim";
             }
-          } else if (rawDelta < 0) {
+          } else if (normalizedDelta < 0) {
             mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
             mult2 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
             distributionMode = isOutroundFlag ? "outround-kayip" : "kayip";
@@ -332,8 +338,8 @@ export async function POST(req: NextRequest) {
             distributionMode = isOutroundFlag ? "outround-berabere" : "berabere";
           }
 
-          const share1 = k1 * rawDelta * mult1 * 2;
-          const share2 = k2 * rawDelta * mult2 * 2;
+          const share1 = k1 * normalizedDelta * mult1 * 2;
+          const share2 = k2 * normalizedDelta * mult2 * 2;
           const elo_before_s1 = s1.elo;
           const elo_before_s2 = s2.elo;
 
