@@ -256,8 +256,7 @@ export async function POST(req: NextRequest) {
           const s = t.speakers[0];
           s.matchCount += 1;
           const personalK = getKFactor(s.matchCount - 1);
-          const normalizedDelta = rawDelta / Math.max(teamStates.length - 1, 1);
-          const change = personalK * normalizedDelta * 2;
+          const change = personalK * rawDelta * 2;
           const eloBefore = s.elo;
           s.elo += change;
           s.eloChange += change;
@@ -312,25 +311,21 @@ export async function POST(req: NextRequest) {
           const sumElo = s1.elo + s2.elo;
           // TUR BAZLI dağıtım modu: her turda SP farkına bak
           const spDiff = Math.abs(sp1 - sp2);
-          // Normalize rawDelta to [-1, +1] range for 4-team BP (divide by number of opponents)
-          const normalizedDelta = rawDelta / Math.max(teamStates.length - 1, 1);
           // SP fark > 1 → Performans (ancak outround'da SP yoksa fark 0 → Gelişim/Kayıp modu)
           let mult1 = 0.5, mult2 = 0.5;
           let distributionMode = "gelisim";
 
-          if (normalizedDelta > 0) {
+          if (rawDelta > 0) {
             if (spDiff > 1) {
-              // Performans Ödülü: Elo ile Doğru Orantılı
               mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
               mult2 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
               distributionMode = "performans";
             } else {
-              // Gelişim Ödülü: Elo ile Ters Orantılı (SP fark ≤ 1 veya outround)
               mult1 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
               mult2 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
               distributionMode = isOutroundFlag ? "outround-gelisim" : "gelisim";
             }
-          } else if (normalizedDelta < 0) {
+          } else if (rawDelta < 0) {
             mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
             mult2 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
             distributionMode = isOutroundFlag ? "outround-kayip" : "kayip";
@@ -338,8 +333,8 @@ export async function POST(req: NextRequest) {
             distributionMode = isOutroundFlag ? "outround-berabere" : "berabere";
           }
 
-          const share1 = k1 * normalizedDelta * mult1 * 2;
-          const share2 = k2 * normalizedDelta * mult2 * 2;
+          const share1 = k1 * rawDelta * mult1 * 2;
+          const share2 = k2 * rawDelta * mult2 * 2;
           const elo_before_s1 = s1.elo;
           const elo_before_s2 = s2.elo;
 

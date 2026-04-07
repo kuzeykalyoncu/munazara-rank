@@ -23,6 +23,20 @@ function normalizeName(name: string): string {
   }).join(" ");
 }
 
+// Removes emojis, extra newlines and normalizes whitespace for team name matching
+function normalizeTeamName(name: string): string {
+  return name
+    // Remove emoji unicode ranges
+    .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{1F300}-\u{1F9FF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}]/gu, "")
+    // Remove variation selectors
+    .replace(/[\uFE00-\uFE0F]/g, "")
+    // Collapse all whitespace (including newlines, tabs)
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 async function fetchPage(url: string): Promise<string | null> {
   try {
     const res = await axios.get(url, {
@@ -234,6 +248,8 @@ function parseTeams(html: string): { name: string; speakers: string[] }[] {
       }
       
       teamName = normalizeName(teamName);
+      // Strip emojis/newlines that Tabbycat sometimes adds as prefixes
+      teamName = normalizeName(teamName.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{1F300}-\u{1F9FF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\uFE00-\uFE0F]/gu, "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " "));
       if (!teamName) continue;
 
       let spNames: string[] = [];
@@ -512,6 +528,9 @@ async function fetchDebateRounds(baseUrl: string) {
                           text = cell.popover.title;
                        }
                        text = text.replace(/<[^>]*>/g, "").trim();
+                       // Strip emojis/newlines Tabbycat prepends to team names
+                       text = text.replace(/[🀀-🿿☀-➿🌀-🧿⌀-⏿⬀-⯿︀-️]/gu, "").replace(/[
+	]+/g, " ").replace(/s{2,}/g, " ").trim();
                        teamPlacements.push({ name: normalizeName(text), sort: cell.sort });
                      }
                  }
