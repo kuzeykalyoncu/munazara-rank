@@ -246,8 +246,7 @@ export default function AdminPage() {
       (clusters || []).forEach((c: AliasCluster) => {
         if (c.items.length > 0) {
            const main = c.items[0].name;
-           const subs = c.items.slice(1).map((i) => i.name);
-           initial[c.id] = { main, subs };
+           initial[c.id] = { main, subs: [] }; // subs boş — kullanıcı seçecek
         }
       });
       setMergeSelections(initial);
