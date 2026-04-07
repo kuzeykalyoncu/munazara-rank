@@ -80,40 +80,60 @@ EA = 1 / (1 + 10^((rakipTeamElo - TeamElo) / 400))`}
       </Section>
 
       {/* Step 3 */}
-      <Section emoji="3️⃣" title="Gerçekleşen Skor (SA) ve İki Dağıtım Modu">
+      <Section emoji="3️⃣" title="Gerçekleşen Skor (SA) ve Üç Dağıtım Modu">
         <p className="text-gray-300 leading-relaxed mb-4">
           SA, oyuncunun o turda &quot;gerçekte ne kadar iyi performans gösterdiğini&quot; ifade eden 0–1 değeridir.
-          <br />
-          Hesaplama yöntemi, oyuncunun SP&apos;si ile takım arkadaşının SP&apos;si arasındaki farka göre iki moddan birine girer:
+          Hangi modun devreye gireceği iki kritere bağlıdır:{" "}
+          <strong className="text-white">turun prelim mi outround mu olduğu</strong> ve{" "}
+          <strong className="text-white">partner SP farkı</strong>.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-4">
           <ModeCard
             color="purple"
             emoji="🟣"
             title="Gelişim Modu"
-            subtitle="SP Fark ≤ 1"
-            description="İki partner birbirine çok yakın SP almışsa (veya eşit ise) Gelişim Modu devreye girer. SA, takımın o salondaki sıralamasına göre (1., 2., 3. veya 4.) belirlenir."
-            formula={`SA (sıralamaya göre):
-  1. Sıra → 1.00
-  2. Sıra → 0.60
-  3. Sıra → 0.40
-  4. Sıra → 0.00`}
+            subtitle="SP Fark ≤ 1 (Prelim)"
+            description="İki partner birbirine çok yakın SP almışsa Gelişim Modu devreye girer. Kazanırsa düşük Elo'luya daha çok puan, kaybederse yüksek Elo'ludan daha çok düşülür."
+            formula={`rawDelta > 0 → kazanç:
+  mult = ortakElo / (s1 + s2)
+  // Düşük Elo'lu → büyük pay
+
+rawDelta < 0 → kayıp:
+  mult = kendiElo / (s1 + s2)
+  // Yüksek Elo'lu → büyük ceza`}
           />
           <ModeCard
             color="blue"
             emoji="🔵"
             title="Performans Modu"
-            subtitle="SP Fark > 1"
-            description="Partner SP'ler arasında 2 veya daha fazla puan fark varsa Performans Modu devreye girer. SA, oyuncunun kendi SP'sinin o salondaki tüm SP'ler içindeki göreli konumuna (percentile) göre belirlenir."
-            formula={`SA (relatif SP'ye göre):
-  SA = (oyuncuSP - minSP) / (maxSP - minSP)
-  minSP / maxSP = o salondaki en düşük/yüksek SP`}
+            subtitle="SP Fark > 1 (Prelim)"
+            description="Kazanç durumunda: kendi Elo'suyla doğru orantılı pay. Katkısı daha fazla olan (daha güçlü) oyuncuya daha fazla ödül."
+            formula={`rawDelta > 0 → kazanç:
+  mult = kendiElo / (s1 + s2)
+  // Yüksek Elo'lu → büyük pay
+
+rawDelta < 0 → kayıp:
+  Gelişim gibi davranır`}
+          />
+          <ModeCard
+            color="purple"
+            emoji="🏆"
+            title="Outround Pairwise"
+            subtitle="Eleme Turu"
+            description="SP yoksa spDiff = 0 → Gelişim/Kayıp modu otomatik çalışır. Pairwise sonuçlar çeyrek/yarı final ve final formatına göre belirlenir."
+            formula={`Çeyrek/Yarı Final:
+  Çıkan ↔ Çıkan → berabere (0.5)
+  Elenen ↔ Elenen → berabere (0.5)
+  Çıkan ↔ Elenen → 1 - 0
+
+Final:
+  Tam sıralama → klasik pairwise`}
           />
         </div>
 
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-amber-300 text-sm mt-2">
-          💡 <strong>Neden iki mod?</strong> BP münazeralarında bazen tüm konuşmacılar eşit SP alır
+          💡 <strong>Neden iki prelim modu?</strong> BP münazeralarında bazen tüm konuşmacılar eşit SP alır
           (tüm 8 konuşmacı 75 puan gibi). Bu durumda relatif performans hesabı anlamsız olur.
           Gelişim Modu, bu durumlarda sıralama bilgisini kullanır.
         </div>
@@ -135,10 +155,82 @@ EA = 1 / (1 + 10^((rakipTeamElo - TeamElo) / 400))`}
   EloDelta = 32 × (0.0 - 0.70) = -22.4  ≈ -22`}
         </CodeBlock>
         <p className="text-gray-400 text-sm mt-3">
-          Tüm prelim (ön eleme) turlarındaki delta&apos;lar toplanır.
-          Outround (eleme) turları Elo hesaplamasına <strong className="text-white">dahil edilmez</strong>:
-          eleme turlarında SP bilgisi toplanmadığından adil bir karşılaştırma yapılamaz.
+          Tüm prelim <strong className="text-white">ve outround (eleme)</strong> turlarındaki delta&apos;lar
+          kümülatif olarak toplanır. Eleme turları, SP yoksa{" "}
+          <strong className="text-indigo-300">Gelişim / Kayıp modunda</strong> hesaplanır.
         </p>
+      </Section>
+
+      {/* Outround Pairwise */}
+      <Section emoji="⚔️" title="Outround (Eleme) Turu — Pairwise Maç Mantığı">
+        <p className="text-gray-300 leading-relaxed mb-4">
+          Eleme turlarında tam bir 1–2–3–4 puanlı sıralama olmayabilir; bunun yerine &quot;tur atlandı / elendi&quot;
+          bilgisi vardır. Sistem bu duruma göre otomatik olarak doğru pairwise skorunu üretir.
+        </p>
+        <div className="space-y-4">
+          <div className="bg-white/3 rounded-xl border border-white/[0.08] p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">🥊</span>
+              <span className="font-semibold text-white text-sm">Çeyrek / Yarı Final Modu</span>
+              <span className="text-xs text-gray-500 ml-auto">4 takım, 2 çıkar</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-gray-500 uppercase border-b border-white/10">
+                    <th className="px-3 py-1.5 text-left">Karşılaşma</th>
+                    <th className="px-3 py-1.5 text-center">SA</th>
+                    <th className="px-3 py-1.5 text-center">SB</th>
+                    <th className="px-3 py-1.5 text-left">Açıklama</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-white/5">
+                    <td className="px-3 py-2 text-green-300">Çıkan 1 ↔ Çıkan 2</td>
+                    <td className="px-3 py-2 text-center font-mono text-gray-300">0.5</td>
+                    <td className="px-3 py-2 text-center font-mono text-gray-300">0.5</td>
+                    <td className="px-3 py-2 text-gray-500">İkisi de geçti → berabere</td>
+                  </tr>
+                  <tr className="border-b border-white/5">
+                    <td className="px-3 py-2 text-red-300">Elenen 3 ↔ Elenen 4</td>
+                    <td className="px-3 py-2 text-center font-mono text-gray-300">0.5</td>
+                    <td className="px-3 py-2 text-center font-mono text-gray-300">0.5</td>
+                    <td className="px-3 py-2 text-gray-500">İkisi de elendi → berabere</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2">
+                      <span className="text-green-300">Çıkan</span>{" ↔ "}
+                      <span className="text-red-300">Elenen</span>
+                    </td>
+                    <td className="px-3 py-2 text-center font-mono text-green-400 font-bold">1</td>
+                    <td className="px-3 py-2 text-center font-mono text-red-400 font-bold">0</td>
+                    <td className="px-3 py-2 text-gray-500">Çıkan kazandı sayılır</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="bg-white/3 rounded-xl border border-white/[0.08] p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">🏆</span>
+              <span className="font-semibold text-white text-sm">Final Modu</span>
+              <span className="text-xs text-gray-500 ml-auto">4 takım, tam sıralama</span>
+            </div>
+            <p className="text-gray-400 text-xs leading-relaxed">
+              Admin panelinde takımlar 1.–2.–3.–4. şeklinde sıralanmışsa{" "}
+              <strong className="text-white">klasik pairwise</strong> çalışır:{" "}
+              1. &gt; 2. &gt; 3. &gt; 4. (her üst sıra alttaki tüm sıraları yener).
+              Sadece şampiyon biliniyorsa, şampiyon diğer 3&apos;ünü yener (SA=1), kalan 3 birbiriyle berabere (SA=0.5).
+            </p>
+          </div>
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 text-blue-300 text-sm">
+            🔍 <strong>SP Fallback:</strong> Eleme turunda SP yoksa sistem{" "}
+            <code className="bg-black/30 px-1 rounded mx-1">spDiff = 0</code>
+            kabul eder ve otomatik olarak <strong>Gelişim / Kayıp modu</strong> devreye girer.
+            Admin panelinden SP&apos;leri manuel girdiysen ve fark &gt; 1 ise{" "}
+            <strong>Performans modu</strong> tetiklenir.
+          </div>
+        </div>
       </Section>
 
       {/* Step 5 */}
@@ -189,11 +281,12 @@ EloSonu = EloBaşlangıcı + toplam_prelim_delta + BreakBonus`}
               <ExampleRow tur="Tur 2" k={48} teamElo={1011} rakipElo={990} ea={0.53} mod="Performans" sa={0.85} delta={+15} />
               <ExampleRow tur="Tur 3" k={48} teamElo={1026} rakipElo={1100} ea={0.37} mod="Gelişim" sa={0.40} delta={+1} />
               <ExampleRow tur="Tur 4" k={48} teamElo={1027} rakipElo={1020} ea={0.50} mod="Performans" sa={0.20} delta={-14} />
+              <ExampleRow tur="🏆 Çeyrek Final" k={48} teamElo={1013} rakipElo={1080} ea={0.40} mod="Outround-Gelişim" sa={0.63} delta={+11} />
               <tr className="bg-white/3 border-t border-white/20">
                 <td colSpan={7} className="px-3 py-2.5 text-right font-semibold text-gray-300">
-                  Prelim Toplamı
+                  Toplam (Prelim + Outround)
                 </td>
-                <td className="px-3 py-2.5 text-right font-bold text-green-400">+13</td>
+                <td className="px-3 py-2.5 text-right font-bold text-green-400">+24</td>
               </tr>
               <tr className="bg-green-500/5 border-t border-green-500/20">
                 <td colSpan={7} className="px-3 py-2.5 text-right text-gray-400 text-xs italic">
@@ -203,9 +296,9 @@ EloSonu = EloBaşlangıcı + toplam_prelim_delta + BreakBonus`}
               </tr>
               <tr className="bg-indigo-500/10 border-t border-indigo-500/40">
                 <td colSpan={7} className="px-3 py-2.5 text-right font-bold text-white">
-                  Yeni Elo (1000 + 13 + 5)
+                  Yeni Elo (1000 + 24 + 5)
                 </td>
-                <td className="px-3 py-2.5 text-right font-bold text-indigo-400 text-sm">1018</td>
+                <td className="px-3 py-2.5 text-right font-bold text-indigo-400 text-sm">1029</td>
               </tr>
             </tbody>
           </table>
@@ -241,8 +334,8 @@ EloSonu = EloBaşlangıcı + toplam_prelim_delta + BreakBonus`}
       <Section emoji="❓" title="Sık Sorulan Sorular">
         <div className="space-y-4">
           <FaqItem
-            q="Eleme (outround) turları neden sayılmıyor?"
-            a="Eleme turlarında Tabbycat genellikle konuşmacı puanı toplamaz. SP olmadan Performans/Gelişim modundan hangisinin devreye gireceği bilinemez ve skor hesaplanamaz."
+            q="Eleme (outround) turları Elo hesabına giriyor mu?"
+            a="Evet, artık giriyor. SP verisi yoksa sistem SP farkı = 0 kabul ederek Gelişim/Kayıp modunu çalıştırır. Admin panelinden SP'leri manuel girebilirsin; girersen fark > 1 olursa Performans modu devreye girebilir. Pairwise mantığı çeyrek/yarı final (2 çıkan, 2 elenen) ve final (tam sıralama) formatlarına göre otomatik seçilir."
           />
           <FaqItem
             q="H2H (Head-to-Head) nasıl işliyor?"
@@ -254,7 +347,11 @@ EloSonu = EloBaşlangıcı + toplam_prelim_delta + BreakBonus`}
           />
           <FaqItem
             q="SP sıfır olan turlar nasıl işlenir?"
-            a="Eğer bir oyuncunun SP'si 0 olarak görünüyorsa (veri eksik), o tur için SA = 0 kabul edilmez; bunun yerine yalnızca sıralama bazlı Gelişim Modu uygulanır."
+            a="SP yoksa (prelim ya da outround fark etmez) sistem SP farkını 0 kabul eder → Gelişim/Kayıp modu devreye girer: kazanırsa düşük Elo'luya daha fazla ödül, kaybederse yüksek Elo'ludan daha fazla düşülür."
+          />
+          <FaqItem
+            q="Outround'da log'da ne görünür?"
+            a='Round log kayıtlarında eleme turları için "outround-gelisim", "outround-kayip" veya "outround-berabere" etiketleri kullanılır. Bu sayede prelim turlarıyla eleme turları log içinde kolayca ayırt edilebilir.'
           />
         </div>
       </Section>
@@ -365,6 +462,8 @@ function ExampleRow({
           className={`text-xs px-2 py-0.5 rounded font-medium ${
             mod === "Performans"
               ? "text-blue-400 bg-blue-500/15"
+              : mod.startsWith("Outround")
+              ? "text-amber-400 bg-amber-500/15"
               : "text-purple-400 bg-purple-500/15"
           }`}
         >
