@@ -538,19 +538,11 @@ export default function AdminPage() {
   }
 
   async function handleSingleSync(t: Tournament) {
-    setLoading(true);
-    setStatus(`🔄 Analiz ediliyor: ${t.name}`);
-    
-    const scraped = await handleScrape(undefined, t.base_url);
-    if (scraped) {
-      const processed = await handleProcess(scraped, scraped.tournamentId);
-      if (processed) {
-         setStatus(`✅ Başarıyla analiz edildi: ${t.name}`);
-         loadTournaments();
-      }
-    } else {
-      setLoading(false);
-    }
+    // Sadece tarama yapar ve break dialogunu açar.
+    // handleProcess, kullanıcı tabloyu kontrol edip "Onayla & Kaydet" butonuna bastıktan sonra tetiklenir.
+    setTournamentUrl(t.base_url);
+    setCurrentTournamentId(t.id);
+    await handleScrape(undefined, t.base_url);
   }
 
   async function handleResetDb() {
