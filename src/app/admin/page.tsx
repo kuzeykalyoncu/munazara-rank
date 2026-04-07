@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Tournament } from "@/lib/supabase";
 
@@ -335,6 +335,12 @@ export default function AdminPage() {
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
   const [processPreview, setProcessPreview] = useState<any[] | null>(null);
   const [overrideBreaks, setOverrideBreaks] = useState<Record<string, boolean>>({});
+  const [expandedSpeakers, setExpandedSpeakers] = useState<Set<string>>(new Set());
+  const toggleSpeakerExpand = (id: string) => setExpandedSpeakers(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
   // Editable sheet
   const [showBreakDialog, setShowBreakDialog] = useState(false);
   const [breakCountInput, setBreakCountInput] = useState("");
@@ -1018,46 +1024,115 @@ export default function AdminPage() {
             <div className="flex items-center gap-2">
               <span className="text-lg">📊</span>
               <span className="font-semibold text-indigo-300">Elo Önizleme — Break tespitlerini düzeltin</span>
+              <span className="text-xs text-gray-500 ml-2">Satıra tıklayarak tur detaylarını görebilirsiniz</span>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setProcessPreview(null)} className="px-3 py-1.5 text-xs rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition">← Geri</button>
-              <button onClick={handleFinalize} disabled={loading}
-                className="px-5 py-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold hover:from-green-500 hover:to-emerald-500 transition-all shadow-lg shadow-green-500/30 disabled:opacity-50 text-sm">
-                {loading ? "Kaydediliyor..." : "✅ Onayla & Kaydet"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setProcessPreview(null)} className="px-3 py-1.5 text-xs rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition">← Geri</button>
+                <button onClick={handleFinalize} disabled={loading}
+                  className="px-5 py-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold hover:from-green-500 hover:to-emerald-500 transition-all shadow-lg shadow-green-500/30 disabled:opacity-50 text-sm">
+                  {loading ? "Kaydediliyor..." : "✅ Onayla & Kaydet"}
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-white/10 text-gray-500 uppercase tracking-wider">
-                  <th className="px-3 py-2 text-left">Konuşmacı</th>
-                  <th className="px-3 py-2 text-right">Avg Prelim SP</th>
-                  <th className="px-3 py-2 text-right">Elo Değişimi</th>
-                  <th className="px-3 py-2 text-right">Elo Sonrası</th>
-                  <th className="px-3 py-2 text-center">Break ✓</th>
-                </tr>
-              </thead>
-              <tbody>
-                {processPreview.map((sp: any) => (
-                  <tr key={sp.speakerId} className="border-b border-white/5 hover:bg-white/3">
-                    <td className="px-3 py-2 font-medium text-white">{sp.name}</td>
-                    <td className="px-3 py-2 text-right text-gray-400">{sp.prelimSpeakAvg > 0 ? sp.prelimSpeakAvg.toFixed(1) : "—"}</td>
-                    <td className={`px-3 py-2 text-right font-mono font-bold ${sp.eloChange >= 0 ? "text-green-400" : "text-red-400"}`}>
-                      {sp.eloChange >= 0 ? "+" : ""}{sp.eloChange}
-                    </td>
-                    <td className="px-3 py-2 text-right text-gray-400 font-mono">{sp.eloAfter}</td>
-                    <td className="px-3 py-2 text-center">
-                      <button onClick={() => setOverrideBreaks(prev => ({ ...prev, [sp.speakerId]: !prev[sp.speakerId] }))}
-                        className={`w-8 h-5 rounded-full transition-colors relative ${overrideBreaks[sp.speakerId] ? "bg-green-500" : "bg-white/10"}`}>
-                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${overrideBreaks[sp.speakerId] ? "left-3.5" : "left-0.5"}`} />
-                      </button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-white/10 text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 py-2 text-left w-6"></th>
+                    <th className="px-3 py-2 text-left">Konuşmacı</th>
+                    <th className="px-3 py-2 text-right">Avg Prelim SP</th>
+                    <th className="px-3 py-2 text-right">Elo Değişimi</th>
+                    <th className="px-3 py-2 text-right">Elo Sonrası</th>
+                    <th className="px-3 py-2 text-center">Break ✓</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {processPreview.map((sp: any) => {
+                    const isExpanded = expandedSpeakers.has(sp.speakerId);
+                    const rounds: any[] = sp.rounds || [];
+                    return (
+                      <React.Fragment key={sp.speakerId}>
+                        {/* Main row */}
+                        <tr
+                          onClick={() => rounds.length > 0 && toggleSpeakerExpand(sp.speakerId)}
+                          className={`border-b border-white/5 transition ${rounds.length > 0 ? "cursor-pointer hover:bg-indigo-500/5" : ""} ${isExpanded ? "bg-indigo-500/5" : ""}`}
+                        >
+                          <td className="px-3 py-2.5 text-center text-gray-500">
+                            {rounds.length > 0 && (
+                              <span className="text-[10px] transition-transform inline-block" style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 font-medium text-white">{sp.name}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-400">{sp.prelimSpeakAvg > 0 ? sp.prelimSpeakAvg.toFixed(1) : "—"}</td>
+                          <td className={`px-3 py-2.5 text-right font-mono font-bold ${sp.eloChange >= 0 ? "text-green-400" : "text-red-400"}`}>
+                            {sp.eloChange >= 0 ? "+" : ""}{sp.eloChange}
+                          </td>
+                          <td className="px-3 py-2.5 text-right text-gray-400 font-mono">{sp.eloAfter}</td>
+                          <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
+                            <button onClick={() => setOverrideBreaks(prev => ({ ...prev, [sp.speakerId]: !prev[sp.speakerId] }))}
+                              className={`w-8 h-5 rounded-full transition-colors relative ${overrideBreaks[sp.speakerId] ? "bg-green-500" : "bg-white/10"}`}>
+                              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${overrideBreaks[sp.speakerId] ? "left-3.5" : "left-0.5"}`} />
+                            </button>
+                          </td>
+                        </tr>
+
+                        {/* Expanded round breakdown */}
+                        {isExpanded && rounds.length > 0 && (
+                          <tr className="border-b border-indigo-500/10 bg-black/20">
+                            <td colSpan={6} className="px-4 py-3">
+                              <div className="space-y-1">
+                                <div className="grid grid-cols-5 gap-2 text-[10px] font-semibold text-gray-600 uppercase tracking-wider px-2 pb-1 border-b border-white/5">
+                                  <span>Tur</span>
+                                  <span className="text-center">Sıra</span>
+                                  <span className="text-center">Mod</span>
+                                  <span className="text-center">SP (Kendi / Partner)</span>
+                                  <span className="text-right">Elo Δ</span>
+                                </div>
+                                {rounds.map((r: any, ri: number) => {
+                                  const modLabel = r.distributionMode || "—";
+                                  const modColor =
+                                    modLabel.includes("performans") ? "text-blue-400" :
+                                    modLabel.includes("outround") ? "text-amber-400" :
+                                    modLabel.includes("gelisim") || modLabel.includes("gelişim") ? "text-purple-400" :
+                                    modLabel.includes("kayip") || modLabel.includes("kayıp") ? "text-red-400" :
+                                    "text-gray-400";
+                                  const delta = r.eloChange ?? 0;
+                                  const posEmoji = r.placement != null ? ["🥇","🥈","🥉","4️⃣"][Math.min(r.placement-1,3)] ?? r.placement : "—";
+                                  return (
+                                    <div key={ri} className={`grid grid-cols-5 gap-2 items-center px-2 py-1.5 rounded-lg ${r.isOutround ? "bg-amber-500/5 border border-amber-500/10" : "hover:bg-white/3"}`}>
+                                      <span className="text-white font-medium truncate">
+                                        {r.isOutround && <span className="mr-1">🏆</span>}{r.roundName}
+                                      </span>
+                                      <span className="text-center text-gray-300">{posEmoji}</span>
+                                      <span className={`text-center text-[10px] font-medium ${modColor}`}>
+                                        {modLabel.replace("outround-","").replace("gelisim","Gelişim").replace("performans","Performans").replace("kayip","Kayıp").replace("berabere","Berabere")}
+                                      </span>
+                                      <span className="text-center text-gray-400 font-mono">
+                                        {r.ownSp != null ? r.ownSp : "—"} / {r.partnerSp != null ? r.partnerSp : "—"}
+                                      </span>
+                                      <span className={`text-right font-mono font-bold ${delta >= 0 ? "text-green-400" : "text-red-400"}`}>
+                                        {delta >= 0 ? "+" : ""}{Math.round(delta * 10) / 10}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                                {/* Break bonus row */}
+                                {overrideBreaks[sp.speakerId] && (
+                                  <div className="grid grid-cols-5 gap-2 items-center px-2 py-1.5 rounded-lg bg-green-500/5 border border-green-500/10">
+                                    <span className="text-green-300 font-medium col-span-4">⚡ Break Bonusu</span>
+                                    <span className="text-right font-mono font-bold text-green-400">+5</span>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
         </div>
       )}
 
