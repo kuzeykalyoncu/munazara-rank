@@ -528,9 +528,7 @@ async function fetchDebateRounds(baseUrl: string) {
                           text = cell.popover.title;
                        }
                        text = text.replace(/<[^>]*>/g, "").trim();
-                       // Strip emojis/newlines Tabbycat prepends to team names
-                       text = text.replace(/[🀀-🿿☀-➿🌀-🧿⌀-⏿⬀-⯿︀-️]/gu, "").replace(/[
-	]+/g, " ").replace(/s{2,}/g, " ").trim();
+                       text = normalizeTeamName(text);
                        teamPlacements.push({ name: normalizeName(text), sort: cell.sort });
                      }
                  }
