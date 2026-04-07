@@ -6,7 +6,7 @@ export interface ScrapeResult {
   speakers: { name: string; totalPoints: number; scores: number[] }[];
   teams: { name: string; speakers: string[] }[];
   results: {
-    rooms: { placements: string[]; isOutround: boolean }[];
+    rooms: { name: string; placements: string[]; isOutround: boolean }[];
     breaks: string[];
     finalists: string[];
     champions: string[];
@@ -295,7 +295,7 @@ function parseTeams(html: string): { name: string; speakers: string[] }[] {
 function parseResults(html: string): ScrapeResult["results"] {
   const $ = cheerio.load(html);
   // Using rooms instead of pairing up rounds
-  const rooms: { placements: string[]; isOutround: boolean }[] = [];
+  const rooms: { name: string; placements: string[]; isOutround: boolean }[] = [];
   const breaks: string[] = [];
   const finalists: string[] = [];
   const champions: string[] = [];
@@ -398,6 +398,7 @@ function parseResults(html: string): ScrapeResult["results"] {
          let validTeams = teamsInRow.filter(t => t && t.length >= 3);
          if (validTeams.length >= 2) {
             rooms.push({
+               name: "Tur",
                placements: validTeams,
                isOutround: currentIsOutround
             });
@@ -417,7 +418,7 @@ function parseResults(html: string): ScrapeResult["results"] {
 }
 
 async function fetchDebateRounds(baseUrl: string) {
-  const rooms: { placements: string[]; isOutround: boolean }[] = [];
+  const rooms: { name: string; placements: string[]; isOutround: boolean }[] = [];
   const warnings: string[] = [];
   let roundIndex = 1;
   let missingCount = 0;
@@ -486,12 +487,17 @@ async function fetchDebateRounds(baseUrl: string) {
                 .filter((idx: number) => idx !== -1);
               
               let isOutround = false;
+              let roundName = `Tur ${roundIndex}`;
               const titleMatch = html.match(/<div[^>]*id="pageTitle"[^>]*>[\s\S]*?<small[^>]*>(.*?)<\/small>/i) 
                               || html.match(/<h[1-3][^>]*>(.*?)<\/h[1-3]>/i)
                               || html.match(/<title>(.*?)<\/title>/i);
               if (titleMatch) {
                  const titleText = (titleMatch[1] || titleMatch[2] || "").toLowerCase();
                  isOutround = /final|çeyrek|yarı|quarter|octo|semi/i.test(titleText);
+                 if (/final/i.test(titleText) && !/yarı|semi|çeyrek|quarter|octo/.test(titleText)) roundName = "Final";
+                 else if (/yarı|semi/i.test(titleText)) roundName = "Yarı Final";
+                 else if (/çeyrek|quarter/i.test(titleText)) roundName = "Çeyrek Final";
+                 else if (/octo/i.test(titleText)) roundName = "Sekizinci Final";
               }
 
               let foundAny = false;
@@ -515,6 +521,7 @@ async function fetchDebateRounds(baseUrl: string) {
                    teamPlacements.sort((a, b) => b.sort - a.sort); // Highest sort is 1st place
                    
                    rooms.push({
+                     name: roundName,
                      placements: teamPlacements.map(t => t.name),
                      isOutround
                    });

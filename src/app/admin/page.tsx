@@ -22,7 +22,7 @@ interface EditableData {
   inferredBreakCount: number;
 }
 
-function buildEditableData(preview: any): EditableData {
+function buildEditableData(preview: any, breakCountOverride?: number): EditableData {
   const { speakers, teams, results, tournamentName, inferredBreakCount } = preview;
   const teamSpeakersMap: Record<string, string[]> = {};
   for (const t of teams) teamSpeakersMap[t.name.toLowerCase()] = t.speakers;
@@ -58,15 +58,23 @@ function buildEditableData(preview: any): EditableData {
         }));
         return { position: pos + 1, teamName: tName, speakers: editSpeakers };
       });
-      return { id: `${rn}-${ri}`, label: room.name || `Salon ${ri + 1}`, teams: editTeams };
+      // room.name is the round name — use Salon 1/2/3 for physical label
+      return { id: `${rn}-${ri}`, label: `Salon ${ri + 1}`, teams: editTeams };
     });
     return { name: rn, isOutround: group.isOutround, rooms: editRooms };
   });
 
+  // Determine break teams: use breakCountOverride if given, else use existing results.breaks
+  const finalBreakCount = breakCountOverride != null && breakCountOverride > 0 ? breakCountOverride : 0;
+  let breakTeams: string[] = results.breaks || [];
+  if (finalBreakCount > 0 && teams.length > 0) {
+    breakTeams = teams.slice(0, finalBreakCount).map((t: any) => t.name.toLowerCase());
+  }
+
   return {
     tournamentName,
     rounds,
-    breakTeams: results.breaks || [],
+    breakTeams,
     bestSpeakers: results.bestSpeakers || [],
     champions: results.champions || [],
     finalists: results.finalists || [],
@@ -723,14 +731,14 @@ export default function AdminPage() {
               onChange={e => setBreakCountInput(e.target.value)}
               className="w-full bg-white/5 border border-indigo-500/40 rounded-xl px-4 py-3 text-white text-center text-2xl font-bold placeholder-gray-600 focus:outline-none focus:border-indigo-400 transition"
               placeholder="0"
-              onKeyDown={e => { if (e.key === "Enter") { setShowBreakDialog(false); setEditableData(buildEditableData(scrapePreview)); setActiveRoundTab(0); } }}
+              onKeyDown={e => { if (e.key === "Enter") { setShowBreakDialog(false); setEditableData(buildEditableData(scrapePreview, Number(breakCountInput))); setActiveRoundTab(0); } }}
             />
             <div className="flex gap-3">
               <button onClick={() => { setShowBreakDialog(false); setScrapePreview(null); setBreakCountInput(""); }}
                 className="flex-1 py-2.5 rounded-xl bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition text-sm">
                 İptal
               </button>
-              <button onClick={() => { setShowBreakDialog(false); setEditableData(buildEditableData(scrapePreview)); setActiveRoundTab(0); }}
+              <button onClick={() => { setShowBreakDialog(false); setEditableData(buildEditableData(scrapePreview, Number(breakCountInput))); setActiveRoundTab(0); }}
                 className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold hover:from-indigo-500 hover:to-violet-500 transition-all shadow-lg shadow-indigo-500/30 active:scale-95">
                 Devam →
               </button>
@@ -971,43 +979,35 @@ export default function AdminPage() {
 
           {/* ── SPEAKERS TAB ── */}
           {activeRoundTab === editableData.rounds.length + 1 && (() => {
-            const allSpeakers = scrapePreview?.speakers ?? [];
+            const allSpeakers: { name: string; totalPoints: number; scores?: number[] }[] = scrapePreview?.speakers ?? [];
             const prelims = editableData.rounds.filter(r => !r.isOutround);
-            // Compute total SP per speaker from editable data
-            const computedSP: Record<string, number> = {};
-            for (const round of prelims) {
-              for (const room of round.rooms) {
-                for (const team of room.teams) {
-                  for (const sp of team.speakers) {
-                    computedSP[sp.name] = (computedSP[sp.name] ?? 0) + sp.sp;
-                  }
-                }
-              }
-            }
-            const sorted = [...allSpeakers].sort((a: any, b: any) => (computedSP[b.name] ?? 0) - (computedSP[a.name] ?? 0));
+            const roundCount = prelims.length;
+            const getSPTotal = (sp: { scores?: number[] }) => (sp.scores || []).reduce((a: number, b: number) => a + b, 0);
+            const sorted = [...allSpeakers].sort((a, b) => getSPTotal(b) - getSPTotal(a));
             return (
               <div className="max-h-[65vh] overflow-y-auto">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-[#0f172a] border-b border-white/10">
+                  <thead className="sticky top-0 bg-[#0f172a] border-b border-white/10 z-10">
                     <tr className="text-gray-500 uppercase tracking-wider">
-                      <th className="px-4 py-2.5 text-left">#</th>
-                      <th className="px-4 py-2.5 text-left">Konuşmacı</th>
-                      <th className="px-4 py-2.5 text-right">Toplam Prelim SP</th>
-                      <th className="px-4 py-2.5 text-right">Tur Sayısı</th>
-                      <th className="px-4 py-2.5 text-right">Ort. SP</th>
+                      <th className="px-3 py-2.5 text-left">#</th>
+                      <th className="px-3 py-2.5 text-left">Konuşmacı</th>
+                      {prelims.map((r, ri) => (<th key={ri} className="px-3 py-2.5 text-center whitespace-nowrap">{r.name}</th>))}
+                      <th className="px-3 py-2.5 text-right">Toplam</th>
+                      <th className="px-3 py-2.5 text-right">Ort.</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sorted.map((sp: any, idx: number) => {
-                      const total = computedSP[sp.name] ?? 0;
-                      const tourCount = prelims.reduce((cnt, r) => cnt + r.rooms.filter(room => room.teams.some(t => t.speakers.some(s => s.name === sp.name))).length, 0);
+                    {sorted.map((sp, idx) => {
+                      const scores: number[] = sp.scores || [];
+                      const total = getSPTotal(sp);
+                      const filled = scores.filter((s: number) => s > 0).length;
                       return (
-                        <tr key={sp.name} className={`border-b border-white/5 ${ idx % 2 === 0 ? "bg-white/2" : "" } hover:bg-white/5`}>
-                          <td className="px-4 py-2.5 text-gray-600">{idx + 1}</td>
-                          <td className="px-4 py-2.5 font-medium text-white">{sp.name}</td>
-                          <td className="px-4 py-2.5 text-right font-mono text-indigo-400 font-bold">{total}</td>
-                          <td className="px-4 py-2.5 text-right text-gray-500">{tourCount}</td>
-                          <td className="px-4 py-2.5 text-right font-mono text-gray-400">{tourCount > 0 ? (total / tourCount).toFixed(1) : "—"}</td>
+                        <tr key={sp.name} className={"border-b border-white/5 " + (idx % 2 === 0 ? "bg-white/[0.02] " : "") + "hover:bg-white/5"}>
+                          <td className="px-3 py-2.5 text-gray-600 text-center">{idx + 1}</td>
+                          <td className="px-3 py-2.5 font-medium text-white">{sp.name}</td>
+                          {Array.from({ length: roundCount }, (_, ri) => (<td key={ri} className="px-3 py-2.5 text-center font-mono text-gray-400">{(scores[ri] ?? 0) > 0 ? scores[ri] : <span className="text-gray-700">—</span>}</td>))}
+                          <td className="px-3 py-2.5 text-right font-mono text-indigo-400 font-bold">{total}</td>
+                          <td className="px-3 py-2.5 text-right font-mono text-gray-400">{filled > 0 ? (total / filled).toFixed(1) : "—"}</td>
                         </tr>
                       );
                     })}

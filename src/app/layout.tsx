@@ -42,6 +42,12 @@ export default function RootLayout({
                   İstatistikler
                 </Link>
                 <Link
+                  href="/mechanics"
+                  className="text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  Hesaplama Şekli
+                </Link>
+                <Link
                   href="/admin"
                   className="text-sm px-3 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-600/40 hover:text-indigo-300 transition-all"
                 >
