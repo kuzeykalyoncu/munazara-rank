@@ -822,8 +822,13 @@ export default function AdminPage() {
             return (
               <div className="p-4 space-y-4 max-h-[65vh] overflow-y-auto">
                 {round.isOutround && (
-                  <div className="bg-orange-500/10 border border-orange-500/20 text-orange-300 px-4 py-2 rounded-lg text-xs">
-                    🏆 Bu bir eleme turu. SP verileri Elo hesaplamasına dahil edilmez.
+                  <div className="bg-blue-500/10 border border-blue-500/20 text-blue-300 px-4 py-2 rounded-lg text-xs flex items-start gap-2">
+                    <span className="mt-0.5">🏆</span>
+                    <span>
+                      <strong>Eleme turu</strong> — SP verisi yoksa sistem SP farkı = 0 kabul ederek
+                      {" "}<strong>Gelişim/Kayıp modunu</strong> otomatik işletir.
+                      İstersen SP puanlarını manuel girebilirsin; girersen Performans Modu devreye girebilir.
+                    </span>
                   </div>
                 )}
                 {round.rooms.map((room, roomIdx) => {
@@ -898,23 +903,19 @@ export default function AdminPage() {
                                   <td className="px-3 py-2.5 font-medium text-white max-w-[120px] truncate">{team.teamName}</td>
                                   <td className="px-3 py-2.5 text-center text-gray-400">{team.speakers[0]?.name ?? "—"}</td>
                                   <td className="px-3 py-2.5 text-center">
-                                    {!round.isOutround ? (
-                                      <input type="number" min="0" max="1000" value={team.speakers[0]?.sp ?? 0}
-                                        onChange={e => updateSp(0, Number(e.target.value))}
-                                        className="w-16 bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-center font-mono text-xs focus:outline-none focus:border-indigo-500" />
-                                    ) : <span className="text-gray-600">—</span>}
+                                    <input type="number" min="0" max="1000" value={team.speakers[0]?.sp ?? 0}
+                                      onChange={e => updateSp(0, Number(e.target.value))}
+                                      className={"w-16 bg-white/5 border rounded px-2 py-1 text-white text-center font-mono text-xs focus:outline-none focus:border-indigo-500 " + (round.isOutround ? "border-white/5 text-gray-500 italic" : "border-white/10")} />
                                   </td>
                                   <td className="px-3 py-2.5 text-center text-gray-400">{team.speakers[1]?.name ?? "—"}</td>
                                   <td className="px-3 py-2.5 text-center">
-                                    {!round.isOutround ? (
-                                      <input type="number" min="0" max="1000" value={team.speakers[1]?.sp ?? 0}
-                                        onChange={e => updateSp(1, Number(e.target.value))}
-                                        className="w-16 bg-white/5 border border-white/10 rounded px-2 py-1 text-white text-center font-mono text-xs focus:outline-none focus:border-indigo-500" />
-                                    ) : <span className="text-gray-600">—</span>}
+                                    <input type="number" min="0" max="1000" value={team.speakers[1]?.sp ?? 0}
+                                      onChange={e => updateSp(1, Number(e.target.value))}
+                                      className={"w-16 bg-white/5 border rounded px-2 py-1 text-white text-center font-mono text-xs focus:outline-none focus:border-indigo-500 " + (round.isOutround ? "border-white/5 text-gray-500 italic" : "border-white/10")} />
                                   </td>
-                                  <td className="px-3 py-2.5 text-center font-mono font-bold text-indigo-400">{!round.isOutround ? total : "—"}</td>
+                                  <td className="px-3 py-2.5 text-center font-mono font-bold text-indigo-400">{total > 0 ? total : "—"}</td>
                                   <td className="px-3 py-2.5 text-center">
-                                    {!round.isOutround && (
+                                    {(
                                       <span className={`font-mono text-xs font-bold px-1.5 py-0.5 rounded ${ diff > 1 ? "text-blue-400 bg-blue-500/15" : "text-purple-400 bg-purple-500/15" }`}>
                                         {diff > 1 ? `▲${diff}` : diff === 0 ? "0" : `${diff}` }
                                       </span>

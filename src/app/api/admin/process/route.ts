@@ -168,9 +168,14 @@ export async function POST(req: NextRequest) {
       if (teamStates.length < 2) continue;
 
       const rName = room.name?.toLowerCase() || "";
-      const isFinal = room.isOutround && teamStates.length === 4 &&
-        rName.includes("final") && !rName.includes("yarı") && !rName.includes("çeyrek") &&
-        !rName.includes("octo") && !rName.includes("semi") && !rName.includes("quarter");
+      // Outround type detection
+      const isFullFinal = room.isOutround &&
+        rName.includes("final") && !rName.includes("yarı") && !rName.includes("semi") &&
+        !rName.includes("çeyrek") && !rName.includes("quarter") && !rName.includes("octo") && !rName.includes("sekiz");
+      // Quarter / Semi: 4 teams where top 2 advance, bottom 2 eliminated
+      const isQSFinal = room.isOutround && !isFullFinal && teamStates.length === 4;
+      // 2-team knockout (very rare in BP, but handle it)
+      const isTwoTeamKO = room.isOutround && teamStates.length === 2;
 
       const teamRawDeltas = new Map<string, number>();
 
@@ -179,12 +184,26 @@ export async function POST(req: NextRequest) {
         for (let j = i + 1; j < teamStates.length; j++) {
           const tA = teamStates[i];
           const tB = teamStates[j];
-          let SA = 1, SB = 0;
+          let SA = 0.5, SB = 0.5;
 
-          if (isFinal) {
-            if (i === 0) { SA = 1; SB = 0; } else { SA = 0.5; SB = 0.5; }
-          } else if (room.isOutround && teamStates.length === 4) {
-            if ((i < 2 && j < 2) || (i >= 2 && j >= 2)) { SA = 0.5; SB = 0.5; }
+          if (isFullFinal) {
+            // placements[0] = champion → beats all. placements[1] = runner-up, etc.
+            // Only if we have full ranking (all 4), use standard pairwise:
+            // position lower = better. i < j means tA placed higher.
+            SA = 1; SB = 0; // i < j always (nested loop), so tA is always ranked higher
+          } else if (isQSFinal) {
+            // Top 2 (indices 0,1) advance; bottom 2 (indices 2,3) eliminated
+            const aAdvances = i < 2;
+            const bAdvances = j < 2;
+            if (aAdvances && bAdvances) { SA = 0.5; SB = 0.5; }       // both advance → draw
+            else if (!aAdvances && !bAdvances) { SA = 0.5; SB = 0.5; } // both eliminated → draw
+            else if (aAdvances && !bAdvances) { SA = 1; SB = 0; }       // A advances, B out → A wins
+            else { SA = 0; SB = 1; }                                    // B advances, A out → B wins
+          } else if (isTwoTeamKO) {
+            SA = 1; SB = 0; // placements[0] won
+          } else if (room.isOutround) {
+            // Generic outround: higher placement wins
+            SA = 1; SB = 0; // i < j always → tA ranked higher
           }
 
           teamRawDeltas.set(tA.name, (teamRawDeltas.get(tA.name) || 0) + (SA - expectedScore(tA.elo, tB.elo)));
@@ -273,9 +292,10 @@ export async function POST(req: NextRequest) {
           s2.matchCount += 1;
 
           let sp1 = 0, sp2 = 0;
+          // Read SP if available (outrounds may have SP entered manually in admin UI)
+          const r1Idx = speakerPrelimIdx[s1.name] || 0;
+          const r2Idx = speakerPrelimIdx[s2.name] || 0;
           if (!isOutroundFlag) {
-            const r1Idx = speakerPrelimIdx[s1.name] || 0;
-            const r2Idx = speakerPrelimIdx[s2.name] || 0;
             sp1 = scraped.find(x => x.name === s1.name)?.scores[r1Idx] || 0;
             sp2 = scraped.find(x => x.name === s2.name)?.scores[r2Idx] || 0;
             s1.prelimSpeakTotal += sp1; s1.prelimRoundCount += 1;
@@ -283,29 +303,33 @@ export async function POST(req: NextRequest) {
             speakerPrelimIdx[s1.name] = r1Idx + 1;
             speakerPrelimIdx[s2.name] = r2Idx + 1;
           }
+          // For outrounds: sp1=0, sp2=0 → spDiff=0 → gelisim/kayip mode runs naturally
 
           const sumElo = s1.elo + s2.elo;
           // TUR BAZLI dağıtım modu: her turda SP farkına bak
           const spDiff = Math.abs(sp1 - sp2);
+          // SP fark > 1 → Performans (ancak outround'da SP yoksa fark 0 → Gelişim/Kayıp modu)
           let mult1 = 0.5, mult2 = 0.5;
           let distributionMode = "gelisim";
 
           if (rawDelta > 0) {
-            if (!isOutroundFlag && spDiff > 1) {
+            if (spDiff > 1) {
               // Performans Ödülü: Elo ile Doğru Orantılı
               mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
               mult2 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
               distributionMode = "performans";
             } else {
-              // Gelişim Ödülü: Elo ile Ters Orantılı
+              // Gelişim Ödülü: Elo ile Ters Orantılı (SP fark ≤ 1 veya outround)
               mult1 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
               mult2 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
-              distributionMode = "gelisim";
+              distributionMode = isOutroundFlag ? "outround-gelisim" : "gelisim";
             }
           } else if (rawDelta < 0) {
             mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
             mult2 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
-            distributionMode = "kayip";
+            distributionMode = isOutroundFlag ? "outround-kayip" : "kayip";
+          } else {
+            distributionMode = isOutroundFlag ? "outround-berabere" : "berabere";
           }
 
           const share1 = k1 * rawDelta * mult1 * 2;
@@ -316,16 +340,14 @@ export async function POST(req: NextRequest) {
           s1.elo += share1; s2.elo += share2;
           s1.eloChange += share1; s2.eloChange += share2;
 
-          const actualDistMode = isOutroundFlag ? "outround" : distributionMode;
-
           roundLogInserts.push({
             speaker_id: s1.id, tournament_id: tournamentId,
             round_name: roundLabel, is_outround: isOutroundFlag,
             placement, partner_name: s2.name,
-            partner_sp: isOutroundFlag ? null : sp2,
-            own_sp: isOutroundFlag ? null : sp1,
-            sp_diff: isOutroundFlag ? null : spDiff,
-            distribution_mode: actualDistMode,
+            partner_sp: sp2 > 0 ? sp2 : null,
+            own_sp: sp1 > 0 ? sp1 : null,
+            sp_diff: spDiff > 0 ? spDiff : null,
+            distribution_mode: distributionMode,
             team_raw_delta: rawDelta, elo_change: share1,
             elo_before: Math.round(elo_before_s1 * 100) / 100,
             elo_after: Math.round(s1.elo * 100) / 100,
@@ -338,10 +360,10 @@ export async function POST(req: NextRequest) {
             speaker_id: s2.id, tournament_id: tournamentId,
             round_name: roundLabel, is_outround: isOutroundFlag,
             placement, partner_name: s1.name,
-            partner_sp: isOutroundFlag ? null : sp1,
-            own_sp: isOutroundFlag ? null : sp2,
-            sp_diff: isOutroundFlag ? null : spDiff,
-            distribution_mode: actualDistMode,
+            partner_sp: sp1 > 0 ? sp1 : null,
+            own_sp: sp2 > 0 ? sp2 : null,
+            sp_diff: spDiff > 0 ? spDiff : null,
+            distribution_mode: distributionMode,
             team_raw_delta: rawDelta, elo_change: share2,
             elo_before: Math.round(elo_before_s2 * 100) / 100,
             elo_after: Math.round(s2.elo * 100) / 100,
