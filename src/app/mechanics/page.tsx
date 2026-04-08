@@ -80,55 +80,48 @@ EA = 1 / (1 + 10^((rakipTeamElo - TeamElo) / 400))`}
       </Section>
 
       {/* Step 3 */}
-      <Section emoji="3️⃣" title="Gerçekleşen Skor (SA) ve Üç Dağıtım Modu">
+      <Section emoji="3️⃣" title="Gerçekleşen Skor (SA) ve Dinamik Dağıtım (IPI Modeli)">
         <p className="text-gray-300 leading-relaxed mb-4">
-          SA, oyuncunun o turda &quot;gerçekte ne kadar iyi performans gösterdiğini&quot; ifade eden 0–1 değeridir.
-          Hangi modun devreye gireceği iki kritere bağlıdır:{" "}
-          <strong className="text-white">turun prelim mi outround mu olduğu</strong> ve{" "}
-          <strong className="text-white">partner SP farkı</strong>.
+          SA, takımın o turda &quot;gerçekte ne kadar iyi performans gösterdiğini&quot; ifade eden bir değerdir (0, 0.5, 1 vs).
+          Takımın toplu kazancı veya kaybı bulunduğunda, bunun takım üyeleri arasına nasıl dağıtılacağı <strong className="text-white">İç Performans Beklentisi (IPI)</strong> modeline göre belirlenir. Bu model, konuşmacının potansiyelini hesaba katar.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 my-4">
           <ModeCard
             color="purple"
             emoji="🟣"
-            title="Gelişim Modu"
-            subtitle="SP Fark ≤ 1 (Prelim)"
-            description="İki partner birbirine çok yakın SP almışsa Gelişim Modu devreye girer. Kazanırsa düşük Elo'luya daha çok puan, kaybederse yüksek Elo'ludan daha çok düşülür."
-            formula={`rawDelta > 0 → kazanç:
-  mult = ortakElo / (s1 + s2)
-  // Düşük Elo'lu → büyük pay
+            title="Beklenti ve Şaşırtma (S)"
+            subtitle="Dinamik IPI Modeli"
+            description="Her 100 ELO puanlık fark, +1 SP üstünlük beklentisi yaratır. Kişilerin aldıkları gerçek SP farkından, varsayılan bu beklenti çıkarıldığında Şaşırtma Katsayısı (S) bulunur."
+            formula={`expected = (kendiElo - ortakElo) / 100
+surpise (S) = (kendiSP - ortakSP) - expected
 
-rawDelta < 0 → kayıp:
-  mult = kendiElo / (s1 + s2)
-  // Yüksek Elo'lu → büyük ceza`}
+// Örnek: X=1200, Y=1000 ELO. X'in +2 SP alması zaten beklenir.
+// Eğer Y, X'ten fazla alırsa (S = -6) inanılmaz boyutlara ulaşır!`}
           />
           <ModeCard
             color="blue"
-            emoji="🔵"
-            title="Performans Modu"
-            subtitle="SP Fark > 1 (Prelim)"
-            description="Kazanç durumunda: kendi Elo'suyla doğru orantılı pay. Katkısı daha fazla olan (daha güçlü) oyuncuya daha fazla ödül."
-            formula={`rawDelta > 0 → kazanç:
-  mult = kendiElo / (s1 + s2)
-  // Yüksek Elo'lu → büyük pay
+            emoji="⚖️"
+            title="Kazanım Dağıtımı"
+            subtitle="Gelişim + Kaydırma"
+            description="Kazanılan maçlarda, güçsüz oynatana gelişim şansı tanınır (ters orantı). Ancak bu oranın üzerine, kişinin Şaşırtma Katsayısının (S) her 1 puanı %5 kayma (+ shift) ekler."
+            formula={`baseMult = ortakElo / (kendiElo + ortakElo)
+shift = S * 0.05 // (Her 1 SP sürprizi = %5 kayma)
 
-rawDelta < 0 → kayıp:
-  Gelişim gibi davranır`}
+// Kazanım Payı: baseMult + shift
+// Eğer Y, X'ten çok daha iyi oynarsa o maçın tüm şerefini Y kapar!`}
           />
           <ModeCard
-            color="purple"
-            emoji="🏆"
-            title="Outround Pairwise"
-            subtitle="Eleme Turu"
-            description="SP yoksa spDiff = 0 → Gelişim/Kayıp modu otomatik çalışır. Pairwise sonuçlar çeyrek/yarı final ve final formatına göre belirlenir."
-            formula={`Çeyrek/Yarı Final:
-  Çıkan ↔ Çıkan → berabere (0.5)
-  Elenen ↔ Elenen → berabere (0.5)
-  Çıkan ↔ Elenen → 1 - 0
+            color="red"
+            emoji="🛡️"
+            title="Kayıp Dağıtımı"
+            subtitle="Taşıyamama + Korunma"
+            description="Kaybedilen maçlarda ELO'su yüksek olan (eli boş dönen favori) büyük zayiatı sırtlar. Ancak takım içinde puanı GÖRECE iyi atanın omuzundan (shift) yükü alınır."
+            formula={`baseMult = kendiElo / (kendiElo + ortakElo)
+shift = S * 0.05
 
-Final:
-  Tam sıralama → klasik pairwise`}
+// Kayıp Payı: baseMult - shift
+// Eğer X ve Y eşit ELO'daysa, takımı satmayıp 1 SP iyi atan zararın sadece %45'ini öder.`}
           />
         </div>
 
@@ -396,7 +389,7 @@ function ModeCard({
   description,
   formula,
 }: {
-  color: "purple" | "blue";
+  color: "purple" | "blue" | "red";
   emoji: string;
   title: string;
   subtitle: string;
@@ -406,11 +399,15 @@ function ModeCard({
   const borderClass =
     color === "purple"
       ? "border-purple-500/30 bg-purple-500/5"
+      : color === "red"
+      ? "border-red-500/30 bg-red-500/5"
       : "border-blue-500/30 bg-blue-500/5";
-  const titleClass = color === "purple" ? "text-purple-300" : "text-blue-300";
+  const titleClass = color === "purple" ? "text-purple-300" : color === "red" ? "text-red-300" : "text-blue-300";
   const badgeClass =
     color === "purple"
       ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
+      : color === "red"
+      ? "bg-red-500/20 text-red-400 border-red-500/30"
       : "bg-blue-500/20 text-blue-400 border-blue-500/30";
   return (
     <div className={`rounded-xl p-4 border ${borderClass} space-y-3`}>
