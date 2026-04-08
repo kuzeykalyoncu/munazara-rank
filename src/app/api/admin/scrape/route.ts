@@ -33,8 +33,7 @@ function normalizeTeamName(name: string): string {
     // Collapse all whitespace (including newlines, tabs)
     .replace(/[\r\n\t]+/g, " ")
     .replace(/\s{2,}/g, " ")
-    .trim()
-    .toLowerCase();
+    .trim();
 }
 
 async function fetchPage(url: string): Promise<string | null> {
