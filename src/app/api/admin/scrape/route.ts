@@ -436,21 +436,37 @@ function parseResults(html: string): ScrapeResult["results"] {
 async function fetchDebateRounds(baseUrl: string) {
   const rooms: { name: string; placements: string[]; isOutround: boolean }[] = [];
   const warnings: string[] = [];
-  let roundIndex = 1;
   let missingCount = 0;
-  let maxBreakCount = 0;
 
-  while (missingCount < 3 && roundIndex <= 20) {
+  // Çekilecek tur listesini eşzamanlı olarak hazırla (Tur 1 den 20 ye kadar)
+  const fetchPromises = Array.from({ length: 20 }, async (_, i) => {
+    const roundIndex = i + 1;
     try {
       const url = `${baseUrl}results/round/${roundIndex}/?view=debate`;
       const html = await fetchPage(url);
-      if (!html) {
-        warnings.push(`Tur ${roundIndex} sayfasına erişilemedi (sonuçlar gizli veya sayfa yok).`);
-        missingCount++;
-        roundIndex++;
-        continue;
-      }
+      if (!html) return { roundIndex, html: null, error: `Tur ${roundIndex} sayfasına erişilemedi (sonuçlar gizli veya sayfa yok).` };
+      return { roundIndex, html, error: null };
+    } catch (e) {
+      return { roundIndex, html: null, error: `Tur ${roundIndex} okunurken bilinmeyen hata.` };
+    }
+  });
 
+  // !! Bütün turlara aynı anda (paralel) istek atılarak indirme hızlandırılır !!
+  const roundResults = await Promise.all(fetchPromises);
+
+  // Gelen yanıtları sırayla (Tur 1 den 20 ye) parse et
+  for (const res of roundResults) {
+    if (missingCount >= 3) break; // Peş peşe 3 hata gelirse sonrası turları yok say
+    
+    const roundIndex = res.roundIndex;
+    if (res.error || !res.html) {
+      warnings.push(res.error || `Tur ${roundIndex} sayfasına erişilemedi.`);
+      missingCount++;
+      continue;
+    }
+    const html = res.html;
+
+    try {
       const startMatch = html.match(/tablesData:\s*(\[[\s\S]*)/);
       if (startMatch) {
         const str = startMatch[1];
@@ -461,26 +477,14 @@ async function fetchDebateRounds(baseUrl: string) {
 
         for (let i = 0; i < str.length; i++) {
           const char = str[i];
-          if (escapeNext) {
-            escapeNext = false;
-            continue;
-          }
-          if (char === '\\') {
-            escapeNext = true;
-            continue;
-          }
-          if (char === '"') {
-            inString = !inString;
-            continue;
-          }
+          if (escapeNext) { escapeNext = false; continue; }
+          if (char === '\\') { escapeNext = true; continue; }
+          if (char === '\"') { inString = !inString; continue; }
           if (!inString) {
             if (char === '[') bracketCount++;
             else if (char === ']') {
               bracketCount--;
-              if (bracketCount === 0) {
-                endPos = i;
-                break;
-              }
+              if (bracketCount === 0) { endPos = i; break; }
             }
           }
         }
@@ -567,12 +571,9 @@ async function fetchDebateRounds(baseUrl: string) {
         warnings.push(`Tur ${roundIndex} sayfası var ancak Tabbycat modeli bulunamadı.`);
         missingCount++;
       }
-      
-      roundIndex++;
     } catch (err) {
-      warnings.push(`Tur ${roundIndex} okunurken bilinmeyen hata.`);
+      warnings.push(`Tur ${roundIndex} parse edilirken bilinmeyen hata.`);
       missingCount++;
-      roundIndex++;
     }
   }
   return { rooms, warnings };
