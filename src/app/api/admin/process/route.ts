@@ -314,26 +314,46 @@ export async function POST(req: NextRequest) {
           const sumElo = s1.elo + s2.elo;
           // TUR BAZLI dağıtım modu: her turda SP farkına bak
           const spDiff = Math.abs(sp1 - sp2);
-          // SP fark > 1 → Performans (ancak outround'da SP yoksa fark 0 → Gelişim/Kayıp modu)
           let mult1 = 0.5, mult2 = 0.5;
           let distributionMode = "gelisim";
 
-          if (rawDelta > 0) {
-            if (spDiff > 1) {
-              mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
-              mult2 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
-              distributionMode = "performans";
-            } else {
+          if (isOutroundFlag || (sp1 === 0 && sp2 === 0)) {
+            // Outround turlarında veya SP girilmemiş turlarda standart ELO ağırlıklı dağıtım
+            if (rawDelta > 0) {
               mult1 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
               mult2 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
               distributionMode = isOutroundFlag ? "outround-gelisim" : "gelisim";
+            } else if (rawDelta < 0) {
+              mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
+              mult2 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
+              distributionMode = isOutroundFlag ? "outround-kayip" : "kayip";
+            } else {
+              distributionMode = isOutroundFlag ? "outround-berabere" : "berabere";
             }
-          } else if (rawDelta < 0) {
-            mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
-            mult2 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
-            distributionMode = isOutroundFlag ? "outround-kayip" : "kayip";
           } else {
-            distributionMode = isOutroundFlag ? "outround-berabere" : "berabere";
+            // Prelim turlarında beklenen SP vs gerçek SP dağıtımı
+            const expectedSpDiff = (s1.elo - s2.elo) / 100; // Her 100 elo 1 SP bekler
+            const actualSpDiff = sp1 - sp2;
+            const surprise = actualSpDiff - expectedSpDiff; // s1'in sürpriz katsayısı
+            const shift = surprise * 0.05; // Her 1 puanlık şaşırtma için %5 kayma
+            
+            if (rawDelta > 0) {
+              // Kazanım: Temel oran Gelişim Ödülü (Düşük eloya doğal avantaj)
+              const baseMult1 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
+              // İyi oynayan daha çok alır (++shift s1 için kazanç)
+              mult1 = Math.max(0.1, Math.min(0.9, baseMult1 + shift));
+              mult2 = 1.0 - mult1;
+              distributionMode = Math.abs(surprise) > 1 ? "performans" : "gelisim";
+            } else if (rawDelta < 0) {
+              // Kayıp: Temel oran Taşıyamama Cezası (Yüksek eloya doğal ceza)
+              const baseMult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
+              // İyi oynayan daha az ceza alır (--shift s1 için ağırlığını hafifletir)
+              mult1 = Math.max(0.1, Math.min(0.9, baseMult1 - shift));
+              mult2 = 1.0 - mult1;
+              distributionMode = Math.abs(surprise) > 1 ? "tasiyamama" : "kayip";
+            } else {
+              distributionMode = "berabere";
+            }
           }
 
           const share1 = k1 * rawDelta * mult1 * 2;
