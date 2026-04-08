@@ -123,12 +123,24 @@ shift = S * 0.05
 // Kayıp Payı: baseMult - shift
 // Eğer X ve Y eşit ELO'daysa, takımı satmayıp 1 SP iyi atan zararın sadece %45'ini öder.`}
           />
+          <ModeCard
+            color="purple"
+            emoji="🦸‍♂️"
+            title="IRON (Tek Kişi) Dağıtımı"
+            subtitle="Gelmeyen Yarışmacı"
+            description="Bir yarışmacının maça gelmeyip 0 SP aldığı, partnerinin ise IRON olarak (iki konuşma yaparak) tek başına yarıştığı turlar için özel moddur."
+            formula={`Eğer S1 = 0 SP ise:
+  S1_Payı = 0 % (Ne kazanır ne kaybeder)
+  S2_Payı = 100 % (Takımın tüm kaderi onda biter)
+
+// Sistem 0 puan gördüğünde bunu bir felaket gibi algılamaz.
+// Maça gelmeyen kişi ELO açısından var olmamış sayılır.`}
+          />
         </div>
 
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-amber-300 text-sm mt-2">
-          💡 <strong>Neden iki prelim modu?</strong> BP münazeralarında bazen tüm konuşmacılar eşit SP alır
-          (tüm 8 konuşmacı 75 puan gibi). Bu durumda relatif performans hesabı anlamsız olur.
-          Gelişim Modu, bu durumlarda sıralama bilgisini kullanır.
+          💡 <strong>Outround (Eleme) Maçlarında Ne Olur?</strong> Final, yarı final gibi konuşmacı puanlaması (SP) yapılmayan turlarda IPI modeli devreye girmez.
+          Bunun yerine takımın beklenen standart gücüne göre salt <strong className="text-white">Gelişim / Kayıp Modu</strong> çalışır.
         </div>
       </Section>
 

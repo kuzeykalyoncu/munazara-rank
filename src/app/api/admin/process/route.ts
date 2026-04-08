@@ -317,7 +317,17 @@ export async function POST(req: NextRequest) {
           let mult1 = 0.5, mult2 = 0.5;
           let distributionMode = "gelisim";
 
-          if (isOutroundFlag || (sp1 === 0 && sp2 === 0)) {
+          if (!isOutroundFlag && sp1 === 0 && sp2 > 0) {
+            // S1 gelmedi, S2 tek başına yarıştı (Iron)
+            mult1 = 0.0;
+            mult2 = 1.0;
+            distributionMode = "iron";
+          } else if (!isOutroundFlag && sp2 === 0 && sp1 > 0) {
+            // S2 gelmedi, S1 tek başına yarıştı (Iron)
+            mult1 = 1.0;
+            mult2 = 0.0;
+            distributionMode = "iron";
+          } else if (isOutroundFlag || (sp1 === 0 && sp2 === 0)) {
             // Outround turlarında veya SP girilmemiş turlarda standart ELO ağırlıklı dağıtım
             if (rawDelta > 0) {
               mult1 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
