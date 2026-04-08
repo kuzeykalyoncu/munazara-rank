@@ -207,6 +207,9 @@ export async function POST(req: NextRequest) {
           } else if (room.isOutround) {
             // Generic outround: higher placement wins
             SA = 1; SB = 0; // i < j always → tA ranked higher
+          } else {
+            // Normal prelim round: higher placement wins
+            SA = 1; SB = 0; // i < j always → tA ranked higher
           }
 
           teamRawDeltas.set(tA.name, (teamRawDeltas.get(tA.name) || 0) + (SA - expectedScore(tA.elo, tB.elo)));
