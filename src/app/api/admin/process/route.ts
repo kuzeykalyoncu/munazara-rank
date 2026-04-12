@@ -218,10 +218,18 @@ export async function POST(req: NextRequest) {
           // 6-Way H2H (matchCount NOT touched here)
           for (const spA of tA.speakers) {
             for (const spB of tB.speakers) {
-              if (SA > SB) {
+              // Final özel kuralı: sadece 1. çıkan herkesi yener, 2/3/4 kendi aralarında berabere
+              let h2hSA = SA, h2hSB = SB;
+              if (isFullFinal) {
+                if (i === 0) { h2hSA = 1; h2hSB = 0; }       // tA = 1. sıra → kazanır
+                else if (j === 0) { h2hSA = 0; h2hSB = 1; }  // tB = 1. sıra → kazanır (mümkün değil ama güvenli)
+                else { h2hSA = 0.5; h2hSB = 0.5; }            // 2/3/4 kendi aralarında berabere
+              }
+
+              if (h2hSA > h2hSB) {
                 spA.pairwiseWins++; spB.pairwiseLosses++;
                 h2hRecords.push({ winner_id: spA.id, loser_id: spB.id, tournament_id: tournamentId, round_name: room.name, round_count: 1, is_tie: false });
-              } else if (SA < SB) {
+              } else if (h2hSA < h2hSB) {
                 spB.pairwiseWins++; spA.pairwiseLosses++;
                 h2hRecords.push({ winner_id: spB.id, loser_id: spA.id, tournament_id: tournamentId, round_name: room.name, round_count: 1, is_tie: false });
               } else {
