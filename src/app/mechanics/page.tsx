@@ -52,10 +52,13 @@ export default function MechanicsPage() {
           {`match_count = girilen salon sayısı (her tur +1)
 
 K-Faktörü:
-  match_count ≤  5  →  K = 64   (yeni başlayan)
-  match_count ≤ 15  →  K = 48
-  match_count ≤ 30  →  K = 32
-  match_count  > 30 →  K = 24   (deneyimli)`}
+  match_count ≤ 20  →  K = 60   (Yerleştirme dönemi)
+  match_count ≤ 100 →  K = 50   (Gelişim dönemi)
+  match_count  > 100 →  K = 40   (Veteran)
+
+Unranked Barajı:
+  match_count ≤ 20 ise oyuncu sıralamada “Unranked” görünür.
+  21. maçından itibaren gerçek sırasına yerleşir.`}
         </CodeBlock>
       </Section>
 
@@ -80,48 +83,38 @@ EA = 1 / (1 + 10^((rakipTeamElo - TeamElo) / 400))`}
       </Section>
 
       {/* Step 3 */}
-      <Section emoji="3️⃣" title="Gerçekleşen Skor (SA) ve Dinamik Dağıtım (IPI Modeli)">
+      <Section emoji="3️⃣" title="Gerçekleşen Skor (SA) ve Dağıtım Modu">
         <p className="text-gray-300 leading-relaxed mb-4">
-          SA, takımın o turda &quot;gerçekte ne kadar iyi performans gösterdiğini&quot; ifade eden bir değerdir (0, 0.5, 1 vs).
-          Takımın toplu kazancı veya kaybı bulunduğunda, bunun takım üyeleri arasına nasıl dağıtılacağı <strong className="text-white">İç Performans Beklentisi (IPI)</strong> modeline göre belirlenir. Bu model, konuşmacının potansiyelini hesaba katar.
+          Takımın kazandığı veya kaybettiği toplam ELO, takım üyeleri arasında &quot;mutlak SP farkı&quot; eşiğine göre ikiye ayrılır.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 my-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
           <ModeCard
             color="purple"
             emoji="🟣"
-            title="Beklenti ve Şaşırtma (S)"
-            subtitle="Dinamik IPI Modeli"
-            description="Her 100 ELO puanlık fark, +1 SP üstünlük beklentisi yaratır. Kişilerin aldıkları gerçek SP farkından, varsayılan bu beklenti çıkarıldığında Şaşırtma Katsayısı (S) bulunur."
-            formula={`expected = (kendiElo - ortakElo) / 100
-surpise (S) = (kendiSP - ortakSP) - expected
-
-// Örnek: X=1200, Y=1000 ELO. X'in +2 SP alması zaten beklenir.
-// Eğer Y, X'ten fazla alırsa (S = -6) inanılmaz boyutlara ulaşır!`}
+            title="Gelişim Modü (Kazanım)"
+            subtitle="|SP Farkı| ≤ 1 (Prelim)"
+            description="İki partner birbirine eşit veya çok yakın SP almışsa düşük Elo&rsquo;luya büyük pay verilir. Gelişim şansı tanınır."
+            formula={`A_Kazanım_Payı = Elo_B / (Elo_A + Elo_B)
+// Düşük Elo’lu → büyük pay (ters oranlı)`}
           />
           <ModeCard
             color="blue"
             emoji="⚖️"
-            title="Kazanım Dağıtımı"
-            subtitle="Gelişim + Kaydırma"
-            description="Kazanılan maçlarda, güçsüz oynatana gelişim şansı tanınır (ters orantı). Ancak bu oranın üzerine, kişinin Şaşırtma Katsayısının (S) her 1 puanı %5 kayma (+ shift) ekler."
-            formula={`baseMult = ortakElo / (kendiElo + ortakElo)
-shift = S * 0.05 // (Her 1 SP sürprizi = %5 kayma)
-
-// Kazanım Payı: baseMult + shift
-// Eğer Y, X'ten çok daha iyi oynarsa o maçın tüm şerefini Y kapar!`}
+            title="Performans Modü (Kazanım)"
+            subtitle="|SP Farkı| > 1 (Prelim)"
+            description="SP farkı açıksa Gelişim ödülü iptal; maçı taşıyan oyuncu (yüksek SP) aslan payını alır. Dağılım Elo ile doğru oranlıdır."
+            formula={`A_Kazanım_Payı = Elo_A / (Elo_A + Elo_B)
+// Yüksek Elo’lu → büyük pay (doğru oranlı)`}
           />
           <ModeCard
             color="red"
             emoji="🛡️"
-            title="Kayıp Dağıtımı"
-            subtitle="Taşıyamama + Korunma"
-            description="Kaybedilen maçlarda ELO'su yüksek olan (eli boş dönen favori) büyük zayiatı sırtlar. Ancak takım içinde puanı GÖRECE iyi atanın omuzundan (shift) yükü alınır."
-            formula={`baseMult = kendiElo / (kendiElo + ortakElo)
-shift = S * 0.05
-
-// Kayıp Payı: baseMult - shift
-// Eğer X ve Y eşit ELO'daysa, takımı satmayıp 1 SP iyi atan zararın sadece %45'ini öder.`}
+            title="Kayıp Modu (SP Farkına Bakılmaz)"
+            subtitle="Ν < 0 (Tüm Prelim / Outround)"
+            description="Takım kaybederse SP farkı hesaba katılmaz. Yüksek ELO’lu oyuncu, beklentisini karşılayamadığı için daha büyük ceza sırtlar."
+            formula={`A_Kayıp_Payı = Elo_A / (Elo_A + Elo_B)
+// Yüksek Elo’lu → büyük ceza (doğru oranlı)`}
           />
           <ModeCard
             color="purple"
@@ -131,18 +124,15 @@ shift = S * 0.05
             description="Bir yarışmacının maça gelmeyip 0 SP aldığı, partnerinin ise IRON olarak (iki konuşma yaparak) tek başına yarıştığı turlar için özel moddur."
             formula={`Eğer S1 = 0 SP ise:
   S1_Payı = 0 % (Ne kazanır ne kaybeder)
-  S2_Payı = 100 % (Takımın tüm kaderi onda biter)
-
-// Sistem 0 puan gördüğünde bunu bir felaket gibi algılamaz.
-// Maça gelmeyen kişi ELO açısından var olmamış sayılır.`}
+  S2_Payı = 100 % (Takımın tüm kaderi onda biter)`}
           />
         </div>
 
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-amber-300 text-sm mt-2">
-          💡 <strong>Outround (Eleme) Maçlarında Ne Olur?</strong> Final, yarı final gibi konuşmacı puanlaması (SP) yapılmayan turlarda IPI modeli devreye girmez.
-          Bunun yerine takımın beklenen standart gücüne göre salt <strong className="text-white">Gelişim / Kayıp Modu</strong> çalışır.
+          💡 <strong>Outround (Eleme) Maçlarında Ne Olur?</strong> Final, yarı final gibi konuşmacı puanlaması (SP) yapılmayan turlarda standart <strong className="text-white">Kazanım / Kayıp Modu</strong> çalışır.
         </div>
       </Section>
+
 
       {/* Step 4 */}
       <Section emoji="4️⃣" title="Elo Delta (Ham Değişim)">

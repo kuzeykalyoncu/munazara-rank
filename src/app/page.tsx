@@ -25,6 +25,51 @@ function RankMedal({ rank }: { rank: number }) {
   return <span className="text-gray-500 font-mono text-sm w-6 text-center">{rank}</span>;
 }
 
+function SpeakerRow({ sp, rank, isUnranked = false }: { sp: Speaker; rank?: number; isUnranked?: boolean }) {
+  const avatarBg = isUnranked
+    ? "bg-gradient-to-br from-gray-600 to-gray-700"
+    : "bg-gradient-to-br from-indigo-500 to-violet-600 shadow shadow-indigo-500/30";
+  return (
+    <tr className={`border-b border-white/5 hover:bg-white/5 transition group ${isUnranked ? "opacity-60" : ""}`}>
+      <td className="px-6 py-4">
+        <div className="flex items-center justify-center">
+          {isUnranked
+            ? <span className="text-xs text-gray-600 font-mono border border-gray-700 rounded px-1.5 py-0.5">—</span>
+            : <RankMedal rank={rank!} />}
+        </div>
+      </td>
+      <td className="px-6 py-4">
+        <Link href={`/speakers/${sp.id}`} className="flex items-center gap-3 hover:text-indigo-400 transition">
+          <div className={`w-9 h-9 rounded-full ${avatarBg} flex items-center justify-center text-white font-bold text-sm shrink-0`}>
+            {sp.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <div className={`font-medium group-hover:text-indigo-400 transition ${isUnranked ? "text-gray-300" : "text-white"}`}>{sp.name}</div>
+            <div className="mt-0.5">
+              {isUnranked
+                ? <span className="text-xs px-2 py-0.5 rounded-full border font-medium text-gray-500 bg-gray-500/10 border-gray-600/40">Unranked</span>
+                : <EloBadge elo={sp.elo} />}
+            </div>
+          </div>
+        </Link>
+      </td>
+      <td className="px-6 py-4 text-right">
+        <span className={`font-bold font-mono ${isUnranked ? "text-lg text-gray-400" : "text-xl text-white"}`}>{sp.elo}</span>
+      </td>
+      <td className={`px-6 py-4 text-right hidden md:table-cell ${isUnranked ? "text-gray-500" : "text-gray-400"}`}>{sp.total_tournaments}</td>
+      <td className={`px-6 py-4 text-right hidden md:table-cell ${isUnranked ? "text-gray-500" : "text-gray-400"}`}>{sp.career_avg_speak?.toFixed(1) ?? "—"}</td>
+      <td className="px-6 py-4 text-right hidden lg:table-cell">
+        <span className={isUnranked ? "text-gray-500" : sp.win_rate >= 60 ? "text-green-400" : sp.win_rate >= 40 ? "text-yellow-400" : "text-gray-400"}>
+          {sp.win_rate ? sp.win_rate.toFixed(0) + "%" : "—"}
+        </span>
+      </td>
+    </tr>
+  );
+}
+
+const UNRANKED_THRESHOLD = 20; // 20 veya altı maç = Unranked
+
+
 export default function LeaderboardPage() {
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +84,11 @@ export default function LeaderboardPage() {
   const filtered = speakers.filter((s) =>
     s.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Ranked (>20 maç) ve Unranked (<= 20 maç) olarak ayır
+  const rankedFiltered = filtered.filter(s => (s.match_count ?? 0) > UNRANKED_THRESHOLD);
+  const unrankedFiltered = filtered.filter(s => (s.match_count ?? 0) <= UNRANKED_THRESHOLD);
+  const globalRankedSpeakers = speakers.filter(s => (s.match_count ?? 0) > UNRANKED_THRESHOLD);
 
   return (
     <div className="space-y-8">
@@ -79,7 +129,6 @@ export default function LeaderboardPage() {
         />
       </div>
 
-      {/* Table */}
       <div className="glass rounded-2xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-24">
@@ -105,63 +154,22 @@ export default function LeaderboardPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((sp, i) => {
-                const globalRank = speakers.findIndex((s) => s.id === sp.id) + 1;
-                return (
-                  <tr
-                    key={sp.id}
-                    className="border-b border-white/5 hover:bg-white/5 transition group"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-center">
-                        <RankMedal rank={globalRank} />
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Link
-                        href={`/speakers/${sp.id}`}
-                        className="flex items-center gap-3 hover:text-indigo-400 transition"
-                      >
-                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow shadow-indigo-500/30">
-                          {sp.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="font-medium text-white group-hover:text-indigo-400 transition">
-                            {sp.name}
-                          </div>
-                          <div className="mt-0.5">
-                            <EloBadge elo={sp.elo} />
-                          </div>
-                        </div>
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <span className="text-xl font-bold text-white font-mono">
-                        {sp.elo}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right text-gray-400 hidden md:table-cell">
-                      {sp.total_tournaments}
-                    </td>
-                    <td className="px-6 py-4 text-right text-gray-400 hidden md:table-cell">
-                      {sp.career_avg_speak?.toFixed(1) ?? "—"}
-                    </td>
-                    <td className="px-6 py-4 text-right hidden lg:table-cell">
-                      <span
-                        className={
-                          sp.win_rate >= 60
-                            ? "text-green-400"
-                            : sp.win_rate >= 40
-                            ? "text-yellow-400"
-                            : "text-gray-400"
-                        }
-                      >
-                        {sp.win_rate ? sp.win_rate.toFixed(0) + "%" : "—"}
-                      </span>
+              {rankedFiltered.map((sp) => {
+                const globalRank = globalRankedSpeakers.findIndex((s) => s.id === sp.id) + 1;
+                return <SpeakerRow key={sp.id} sp={sp} rank={globalRank} />;
+              })}
+              {unrankedFiltered.length > 0 && (
+                <>
+                  <tr>
+                    <td colSpan={6} className="px-6 py-2 bg-white/[0.02] border-y border-white/10">
+                      <span className="text-xs text-gray-500 uppercase tracking-widest">Unranked — Sıralamaya girmek için 21 maç gerekiyor</span>
                     </td>
                   </tr>
-                );
-              })}
+                  {unrankedFiltered.map((sp) => (
+                    <SpeakerRow key={sp.id} sp={sp} isUnranked />
+                  ))}
+                </>
+              )}
             </tbody>
           </table>
         )}
