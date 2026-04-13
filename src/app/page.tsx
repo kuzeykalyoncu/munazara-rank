@@ -67,7 +67,7 @@ function SpeakerRow({ sp, rank, isUnranked = false }: { sp: Speaker; rank?: numb
   );
 }
 
-const UNRANKED_THRESHOLD = 20; // 20 veya altı maç = Unranked
+const UNRANKED_MIN_TOURNAMENTS = 5; // 5. turnuvadan itibaren Ranked
 
 
 export default function LeaderboardPage() {
@@ -85,10 +85,10 @@ export default function LeaderboardPage() {
     s.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Ranked (>20 maç) ve Unranked (<= 20 maç) olarak ayır
-  const rankedFiltered = filtered.filter(s => (s.match_count ?? 0) > UNRANKED_THRESHOLD);
-  const unrankedFiltered = filtered.filter(s => (s.match_count ?? 0) <= UNRANKED_THRESHOLD);
-  const globalRankedSpeakers = speakers.filter(s => (s.match_count ?? 0) > UNRANKED_THRESHOLD);
+  // Ranked (>= 5 turnuva) ve Unranked (< 5 turnuva) olarak ayır
+  const rankedFiltered = filtered.filter(s => (s.total_tournaments ?? 0) >= UNRANKED_MIN_TOURNAMENTS);
+  const unrankedFiltered = filtered.filter(s => (s.total_tournaments ?? 0) < UNRANKED_MIN_TOURNAMENTS);
+  const globalRankedSpeakers = speakers.filter(s => (s.total_tournaments ?? 0) >= UNRANKED_MIN_TOURNAMENTS);
 
   return (
     <div className="space-y-8">
@@ -162,7 +162,7 @@ export default function LeaderboardPage() {
                 <>
                   <tr>
                     <td colSpan={6} className="px-6 py-2 bg-white/[0.02] border-y border-white/10">
-                      <span className="text-xs text-gray-500 uppercase tracking-widest">Unranked — Sıralamaya girmek için 21 maç gerekiyor</span>
+                      <span className="text-xs text-gray-500 uppercase tracking-widest">Unranked — Sıralamaya girmek için 5 turnuva gerekiyor</span>
                     </td>
                   </tr>
                   {unrankedFiltered.map((sp) => (
