@@ -190,46 +190,38 @@ export async function POST(req: NextRequest) {
           let SA = 0.5, SB = 0.5;
 
           if (isFullFinal) {
-            // placements[0] = champion → beats all. placements[1] = runner-up, etc.
-            // Only if we have full ranking (all 4), use standard pairwise:
-            // position lower = better. i < j means tA placed higher.
-            SA = 1; SB = 0; // i < j always (nested loop), so tA is always ranked higher
+            // BP Final: sadece 1. sıra (şampiyon) herkesi yener.
+            // 2., 3., 4. kendi aralarında berabere — "finalist" olarak eşit.
+            if (i === 0) { SA = 1; SB = 0; }        // tA şampiyon → kazanır
+            else if (j === 0) { SA = 0; SB = 1; }   // tB şampiyon → kazanır (i>0 iken j=0 olmaz ama güvenli)
+            else { SA = 0.5; SB = 0.5; }             // finalist vs finalist → berabere
           } else if (isQSFinal) {
             // Top 2 (indices 0,1) advance; bottom 2 (indices 2,3) eliminated
             const aAdvances = i < 2;
             const bAdvances = j < 2;
-            if (aAdvances && bAdvances) { SA = 0.5; SB = 0.5; }       // both advance → draw
-            else if (!aAdvances && !bAdvances) { SA = 0.5; SB = 0.5; } // both eliminated → draw
-            else if (aAdvances && !bAdvances) { SA = 1; SB = 0; }       // A advances, B out → A wins
-            else { SA = 0; SB = 1; }                                    // B advances, A out → B wins
+            if (aAdvances && bAdvances) { SA = 0.5; SB = 0.5; }
+            else if (!aAdvances && !bAdvances) { SA = 0.5; SB = 0.5; }
+            else if (aAdvances && !bAdvances) { SA = 1; SB = 0; }
+            else { SA = 0; SB = 1; }
           } else if (isTwoTeamKO) {
             SA = 1; SB = 0; // placements[0] won
           } else if (room.isOutround) {
-            // Generic outround: higher placement wins
-            SA = 1; SB = 0; // i < j always → tA ranked higher
+            SA = 1; SB = 0;
           } else {
             // Normal prelim round: higher placement wins
-            SA = 1; SB = 0; // i < j always → tA ranked higher
+            SA = 1; SB = 0;
           }
 
           teamRawDeltas.set(tA.name, (teamRawDeltas.get(tA.name) || 0) + (SA - expectedScore(tA.elo, tB.elo)));
           teamRawDeltas.set(tB.name, (teamRawDeltas.get(tB.name) || 0) + (SB - expectedScore(tB.elo, tA.elo)));
 
-          // 6-Way H2H (matchCount NOT touched here)
+          // 6-Way H2H — isFullFinal için SA/SB zaten doğru, direkt kullan
           for (const spA of tA.speakers) {
             for (const spB of tB.speakers) {
-              // Final özel kuralı: sadece 1. çıkan herkesi yener, 2/3/4 kendi aralarında berabere
-              let h2hSA = SA, h2hSB = SB;
-              if (isFullFinal) {
-                if (i === 0) { h2hSA = 1; h2hSB = 0; }       // tA = 1. sıra → kazanır
-                else if (j === 0) { h2hSA = 0; h2hSB = 1; }  // tB = 1. sıra → kazanır (mümkün değil ama güvenli)
-                else { h2hSA = 0.5; h2hSB = 0.5; }            // 2/3/4 kendi aralarında berabere
-              }
-
-              if (h2hSA > h2hSB) {
+              if (SA > SB) {
                 spA.pairwiseWins++; spB.pairwiseLosses++;
                 h2hRecords.push({ winner_id: spA.id, loser_id: spB.id, tournament_id: tournamentId, round_name: room.name, round_count: 1, is_tie: false });
-              } else if (h2hSA < h2hSB) {
+              } else if (SA < SB) {
                 spB.pairwiseWins++; spA.pairwiseLosses++;
                 h2hRecords.push({ winner_id: spB.id, loser_id: spA.id, tournament_id: tournamentId, round_name: room.name, round_count: 1, is_tie: false });
               } else {
