@@ -327,22 +327,31 @@ export async function POST(req: NextRequest) {
             mult2 = 0.0;
             distributionMode = "iron";
           } else if (rawDelta > 0) {
-            // KAZANİM
-            if (spDiff <= 1) {
-              // Gelişim Ödülü: eşit / yakın SP → ters oranlı (düşük elo’luya büyük pay)
+            // KAZANIM
+            if (spDiff <= 1 || isOutroundFlag) {
+              // Gelişim Ödülü: eşit/yakın SP veya outround → ters oranlı ELO (düşük elo'luya büyük pay)
               mult1 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
               mult2 = 1.0 - mult1;
-              distributionMode = "gelisim";
+              distributionMode = isOutroundFlag ? "outround-gelisim" : "gelisim";
             } else {
-              // Performans Ödülü: SP farkı açık → doğru oranlı (yüksek elo’luya büyük pay)
-              mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
+              // Performans Ödülü: SP farkı açık → SP ORANINA GÖRE (daha iyi SP alan daha fazla Elo alır)
+              const sumSp = sp1 + sp2;
+              mult1 = sumSp > 0 ? (sp1 / sumSp) : 0.5;
               mult2 = 1.0 - mult1;
-              distributionMode = isOutroundFlag ? "outround-gelisim" : "performans";
+              distributionMode = "performans";
             }
           } else if (rawDelta < 0) {
-            // KAYIP: SP farkına bakılmaz, her zaman doğru oranlı (yüksek elo’lu büyük ceza)
-            mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
-            mult2 = 1.0 - mult1;
+            // KAYIP: SP ORANINA GÖRE (daha iyi SP alan daha az kaybeder)
+            // mult1 = sp2/sumSp → sp1 büyükse mult1 küçük → rawDelta<0 → s1 daha az kaybeder ✓
+            const sumSp = sp1 + sp2;
+            if (sumSp > 0 && !isOutroundFlag) {
+              mult1 = sp2 / sumSp;
+              mult2 = sp1 / sumSp;
+            } else {
+              // Outround veya SP yok → ELO-bazlı (yüksek elo'lu büyük ceza)
+              mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
+              mult2 = 1.0 - mult1;
+            }
             distributionMode = isOutroundFlag ? "outround-kayip" : "kayip";
           } else {
             distributionMode = isOutroundFlag ? "outround-berabere" : "berabere";

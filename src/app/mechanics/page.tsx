@@ -103,18 +103,18 @@ EA = 1 / (1 + 10^((rakipTeamElo - TeamElo) / 400))`}
             emoji="⚖️"
             title="Performans Modü (Kazanım)"
             subtitle="|SP Farkı| > 1 (Prelim)"
-            description="SP farkı açıksa Gelişim ödülü iptal; maçı taşıyan oyuncu (yüksek SP) aslan payını alır. Dağılım Elo ile doğru oranlıdır."
-            formula={`A_Kazanım_Payı = Elo_A / (Elo_A + Elo_B)
-// Yüksek Elo’lu → büyük pay (doğru oranlı)`}
+            description="SP farkı açıksa Gelişim ödülü iptal; daha yüksek SP alan aslan payını alır. Dağılım SP oranı ile belirlenir — Elo eşitliği artık sonucu değiştirmez."
+            formula={`A_Kazanım_Payı = SP_A / (SP_A + SP_B)
+// Yüksek SP'li → büyük pay (SP oranı)`}
           />
           <ModeCard
             color="red"
             emoji="🛡️"
-            title="Kayıp Modu (SP Farkına Bakılmaz)"
-            subtitle="Ν < 0 (Tüm Prelim / Outround)"
-            description="Takım kaybederse SP farkı hesaba katılmaz. Yüksek ELO’lu oyuncu, beklentisini karşılayamadığı için daha büyük ceza sırtlar."
-            formula={`A_Kayıp_Payı = Elo_A / (Elo_A + Elo_B)
-// Yüksek Elo’lu → büyük ceza (doğru oranlı)`}
+            title="Kayıp Modu (SP Oranına Göre)"
+            subtitle="Δ < 0 (Prelim)"
+            description="Takım kaybederse daha yüksek SP alan oyuncu daha az Elo kaybeder. Dağılım ters SP oranıyla belirlenir. Outround'larda SP olmadığından Elo-bazlı kayıp uygulanır."
+            formula={`A_Kayıp_Payı = SP_B / (SP_A + SP_B)
+// SP_A > SP_B ise A daha az kaybeder (ters SP oranı)`}
           />
           <ModeCard
             color="purple"
