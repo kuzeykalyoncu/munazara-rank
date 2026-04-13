@@ -57,8 +57,8 @@ K-Faktörü:
   match_count  > 100 →  K = 40   (Veteran)
 
 Unranked Barajı:
-  match_count ≤ 20 ise oyuncu sıralamada “Unranked” görünür.
-  21. maçından itibaren gerçek sırasına yerleşir.`}
+  total_tournaments < 4 ise oyuncu sıralamada “Unranked” görünür.
+  4. turnuvasında gerçek sırasına yerleşir.`}
         </CodeBlock>
       </Section>
 
