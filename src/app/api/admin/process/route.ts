@@ -189,31 +189,38 @@ export async function POST(req: NextRequest) {
           const tB = teamStates[j];
           let SA = 0.5, SB = 0.5;
 
+          let skipEloDelta = false;
+
           if (isFullFinal) {
             // BP Final: sadece 1. sıra (şampiyon) herkesi yener.
-            // 2., 3., 4. kendi aralarında berabere — "finalist" olarak eşit.
             if (i === 0) { SA = 1; SB = 0; }        // tA şampiyon → kazanır
-            else if (j === 0) { SA = 0; SB = 1; }   // tB şampiyon → kazanır (i>0 iken j=0 olmaz ama güvenli)
-            else { SA = 0.5; SB = 0.5; }             // finalist vs finalist → berabere
+            else if (j === 0) { SA = 0; SB = 1; }   // tB şampiyon → kazanır
+            else {
+              SA = 0.5; SB = 0.5;
+              skipEloDelta = true; // finalist vs finalist → ELO delta atla (sadece H2H berabere)
+            }
           } else if (isQSFinal) {
             // Top 2 (indices 0,1) advance; bottom 2 (indices 2,3) eliminated
             const aAdvances = i < 2;
             const bAdvances = j < 2;
-            if (aAdvances && bAdvances) { SA = 0.5; SB = 0.5; }
-            else if (!aAdvances && !bAdvances) { SA = 0.5; SB = 0.5; }
-            else if (aAdvances && !bAdvances) { SA = 1; SB = 0; }
-            else { SA = 0; SB = 1; }
+            if (aAdvances && bAdvances) {
+              SA = 0.5; SB = 0.5;
+              skipEloDelta = true; // ilerleyen vs ilerleyen → ELO delta atla (ikisi de kazandı)
+            } else if (!aAdvances && !bAdvances) { SA = 0.5; SB = 0.5; } // elenen vs elenen → berabere
+            else if (aAdvances && !bAdvances) { SA = 1; SB = 0; }        // A ilerledi, B elendi → A kazandı
+            else { SA = 0; SB = 1; }                                     // B ilerledi, A elendi → B kazandı
           } else if (isTwoTeamKO) {
-            SA = 1; SB = 0; // placements[0] won
+            SA = 1; SB = 0;
           } else if (room.isOutround) {
             SA = 1; SB = 0;
           } else {
-            // Normal prelim round: higher placement wins
             SA = 1; SB = 0;
           }
 
-          teamRawDeltas.set(tA.name, (teamRawDeltas.get(tA.name) || 0) + (SA - expectedScore(tA.elo, tB.elo)));
-          teamRawDeltas.set(tB.name, (teamRawDeltas.get(tB.name) || 0) + (SB - expectedScore(tB.elo, tA.elo)));
+          if (!skipEloDelta) {
+            teamRawDeltas.set(tA.name, (teamRawDeltas.get(tA.name) || 0) + (SA - expectedScore(tA.elo, tB.elo)));
+            teamRawDeltas.set(tB.name, (teamRawDeltas.get(tB.name) || 0) + (SB - expectedScore(tB.elo, tA.elo)));
+          }
 
           // 6-Way H2H — isFullFinal için SA/SB zaten doğru, direkt kullan
           for (const spA of tA.speakers) {
