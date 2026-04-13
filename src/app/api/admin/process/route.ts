@@ -334,19 +334,19 @@ export async function POST(req: NextRequest) {
               mult2 = 1.0 - mult1;
               distributionMode = isOutroundFlag ? "outround-gelisim" : "gelisim";
             } else {
-              // Performans Ödülü: herhangi SP farkı var → SP ORANINA GÖRE (daha iyi SP alan daha fazla Elo alır)
-              const sumSp = sp1 + sp2;
-              mult1 = sumSp > 0 ? (sp1 / sumSp) : 0.5;
+              // Performans Ödülü: SP farkı doğrudan dağılımı belirler (sensitivity=20, cap 10%-90%)
+              // diff=1 → 55/45 | diff=2 → 60/40 | diff=5 → 75/25 | diff≥8 → 90/10
+              const signed = sp1 - sp2; // pozitif: s1 daha iyi
+              mult1 = Math.max(0.1, Math.min(0.9, 0.5 + signed / 20));
               mult2 = 1.0 - mult1;
               distributionMode = "performans";
             }
           } else if (rawDelta < 0) {
-            // KAYIP: SP ORANINA GÖRE (daha iyi SP alan daha az kaybeder)
-            // mult1 = sp2/sumSp → sp1 büyükse mult1 küçük → rawDelta<0 → s1 daha az kaybeder ✓
-            const sumSp = sp1 + sp2;
-            if (sumSp > 0 && !isOutroundFlag) {
-              mult1 = sp2 / sumSp;
-              mult2 = sp1 / sumSp;
+            // KAYIP: SP farkı doğrudan dağılımı belirler (ters yön — iyi SP daha az kaybeder)
+            if (!isOutroundFlag && (sp1 + sp2) > 0) {
+              const signed = sp1 - sp2; // pozitif: s1 daha iyi → s1 daha az kaybetmeli
+              mult1 = Math.max(0.1, Math.min(0.9, 0.5 - signed / 20));
+              mult2 = 1.0 - mult1;
             } else {
               // Outround veya SP yok → ELO-bazlı (yüksek elo'lu büyük ceza)
               mult1 = sumElo > 0 ? (s1.elo / sumElo) : 0.5;
