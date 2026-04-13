@@ -328,13 +328,13 @@ export async function POST(req: NextRequest) {
             distributionMode = "iron";
           } else if (rawDelta > 0) {
             // KAZANIM
-            if (spDiff <= 1 || isOutroundFlag) {
-              // Gelişim Ödülü: eşit/yakın SP veya outround → ters oranlı ELO (düşük elo'luya büyük pay)
+            if (spDiff === 0 || isOutroundFlag) {
+              // Gelişim Ödülü: SP tam eşit veya outround → ters oranlı ELO (düşük elo'luya büyük pay)
               mult1 = sumElo > 0 ? (s2.elo / sumElo) : 0.5;
               mult2 = 1.0 - mult1;
               distributionMode = isOutroundFlag ? "outround-gelisim" : "gelisim";
             } else {
-              // Performans Ödülü: SP farkı açık → SP ORANINA GÖRE (daha iyi SP alan daha fazla Elo alır)
+              // Performans Ödülü: herhangi SP farkı var → SP ORANINA GÖRE (daha iyi SP alan daha fazla Elo alır)
               const sumSp = sp1 + sp2;
               mult1 = sumSp > 0 ? (sp1 / sumSp) : 0.5;
               mult2 = 1.0 - mult1;

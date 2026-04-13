@@ -93,8 +93,8 @@ EA = 1 / (1 + 10^((rakipTeamElo - TeamElo) / 400))`}
             color="purple"
             emoji="🟣"
             title="Gelişim Modü (Kazanım)"
-            subtitle="|SP Farkı| ≤ 1 (Prelim)"
-            description="İki partner birbirine eşit veya çok yakın SP almışsa düşük Elo&rsquo;luya büyük pay verilir. Gelişim şansı tanınır."
+            subtitle="SP Farkı = 0 (Tam Eşit, Prelim)"
+            description="İki partner birebir aynı SP aldığında düşük Elo&rsquo;luya büyük pay verilir. Gelişim şansı tanınır."
             formula={`A_Kazanım_Payı = Elo_B / (Elo_A + Elo_B)
 // Düşük Elo’lu → büyük pay (ters oranlı)`}
           />
@@ -102,8 +102,8 @@ EA = 1 / (1 + 10^((rakipTeamElo - TeamElo) / 400))`}
             color="blue"
             emoji="⚖️"
             title="Performans Modü (Kazanım)"
-            subtitle="|SP Farkı| > 1 (Prelim)"
-            description="SP farkı açıksa Gelişim ödülü iptal; daha yüksek SP alan aslan payını alır. Dağılım SP oranı ile belirlenir — Elo eşitliği artık sonucu değiştirmez."
+            subtitle="SP Farkı ≥ 1 (Prelim)"
+            description="Herhangi bir SP farkı varsa Gelişim ödülü iptal; daha yüksek SP alan aslan payını alır. ELO eşitliği sonucu değiştirmez."
             formula={`A_Kazanım_Payı = SP_A / (SP_A + SP_B)
 // Yüksek SP'li → büyük pay (SP oranı)`}
           />
