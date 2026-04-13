@@ -67,7 +67,7 @@ function SpeakerRow({ sp, rank, isUnranked = false }: { sp: Speaker; rank?: numb
   );
 }
 
-const UNRANKED_THRESHOLD = 20; // 20 veya altı maç = Unranked
+const UNRANKED_THRESHOLD = 20; // 20 veya altı salon = Unranked (prelim_round_count)
 
 
 export default function LeaderboardPage() {
@@ -85,10 +85,10 @@ export default function LeaderboardPage() {
     s.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Ranked (>20 maç) ve Unranked (≤ 20 maç) olarak ayır
-  const rankedFiltered = filtered.filter(s => (s.match_count ?? 0) > UNRANKED_THRESHOLD);
-  const unrankedFiltered = filtered.filter(s => (s.match_count ?? 0) <= UNRANKED_THRESHOLD);
-  const globalRankedSpeakers = speakers.filter(s => (s.match_count ?? 0) > UNRANKED_THRESHOLD);
+  // Ranked (>20 salon) ve Unranked (≤ 20 salon) olarak ayır
+  const rankedFiltered = filtered.filter(s => (s.prelim_round_count ?? 0) > UNRANKED_THRESHOLD);
+  const unrankedFiltered = filtered.filter(s => (s.prelim_round_count ?? 0) <= UNRANKED_THRESHOLD);
+  const globalRankedSpeakers = speakers.filter(s => (s.prelim_round_count ?? 0) > UNRANKED_THRESHOLD);
 
   return (
     <div className="space-y-8">
