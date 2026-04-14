@@ -128,9 +128,9 @@ function parseSpeakers(
     const avgIdx = head.findIndex((h: any) => ["Avg", "Average"].includes(h.key || h.tooltip || h.title));
     const totalIdx = head.findIndex((h: any) => ["Total", "Points"].includes(h.key || h.tooltip || h.title));
     
-    // Find round score indices (usually R1, R2, etc.)
+    // Find round score indices — supports R1/R2... (Tabbycat default) AND T1/T2... (TabCim variant) and other single-letter prefixes
     const roundIndices = head
-      .map((h: any, idx: number) => (/^R\d+$/.test(h.key || h.title || "") ? idx : -1))
+      .map((h: any, idx: number) => (/^[A-Z]\d+$/.test(h.key || h.title || "") ? idx : -1))
       .filter((idx: number) => idx !== -1);
 
     for (const row of vueData[0].data) {
