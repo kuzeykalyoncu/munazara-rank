@@ -380,6 +380,7 @@ export default function SpeakerProfilePage() {
             )}
           </div>
 
+        </div>
       </div>
 
       {/* ELO Chart */}
