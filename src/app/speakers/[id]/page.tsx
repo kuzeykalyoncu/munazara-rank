@@ -300,7 +300,7 @@ export default function SpeakerProfilePage() {
   const totalBreakBonus = careerBreaks * 5;
 
   // Break yapılan turnuvalar — break_status true olanlar
-  // Fallback: elo_history toplam delta ile round log toplamı karşılaştır (+5 break bonusu varsa)
+  // Fallback: round log verisi varsa elo_change farkından break tespiti
   const roundEloByTournament: Record<string, number> = {};
   for (const r of (roundLogs || [])) {
     if (!roundEloByTournament[r.tournament_id]) roundEloByTournament[r.tournament_id] = 0;
@@ -309,14 +309,15 @@ export default function SpeakerProfilePage() {
 
   const breakTournaments = tournamentStats
     .filter(s => {
-      if (s.break_status === true) return true; // doğrudan kaynak
-      // Fallback: elo_history delta - round toplamı ≥ 4 ise break var
+      if (s.break_status === true) return true;
+      // Fallback: sadece round log verisi olan turnuvalarda heuristic uygula
       const tId = (s as any).tournament_id;
+      const roundSum = roundEloByTournament[tId]; // undefined ise es gecilir
+      if (roundSum === undefined) return false; // round verisi yok, tahmin yapma
       const histEntry = eloHistory.find(h => (h as any).tournament_id === tId);
       if (!histEntry) return false;
       const histDelta = histEntry.elo_after - histEntry.elo_before;
-      const roundSum = roundEloByTournament[tId] || 0;
-      return (histDelta - roundSum) >= 4; // break bonus tam +5, 1 yuvarlanma payı
+      return (histDelta - roundSum) >= 4; // break bonus +5, 1 yuvarlanma payi
     })
     .map(s => ({
       name: s.tournaments?.name ?? "Bilinmeyen Turnuva",
@@ -391,8 +392,9 @@ export default function SpeakerProfilePage() {
                       </div>
                     </div>
                   )) : (
-                    <div className="px-3 py-4 text-sm text-gray-500 text-center">
-                      Turnuva listesi görüntülenemedi.
+                    <div className="px-3 py-4 text-xs text-gray-500 text-center space-y-1">
+                      <div>⚡ {careerBreaks} break — liste için</div>
+                      <div>turnuvalar yeniden işlenmeli.</div>
                     </div>
                   )}
                 </div>

@@ -515,14 +515,19 @@ export async function POST(req: NextRequest) {
 
       finalEloChanges[sp.name] = Math.round(spData.eloChange);
 
-      statsInserts.push({
+      // break_status / final_status / champion_status: sadece true ise yaz, false ise atla
+      // Boylece bir onceki yuksek dogru deger yeniden isleme sirasinda false'a overwrite edilmez
+      const statsEntry: Record<string, any> = {
         tournament_id: tournamentId, speaker_id: spData.id,
         speak_avg: Math.round(prelimSpeakAvg * 100) / 100,
         partner_id: partnerId || null,
-        break_status: didBreak, final_status: didFinal, champion_status: didChamp,
         best_speaker_status: [...bestSpeakerSet].some(b => nameLower.includes(b) || b.includes(nameLower.split(" ")[0])),
         elo_change: finalEloChanges[sp.name], carry_bonus: 0,
-      });
+      };
+      if (didBreak)  statsEntry.break_status   = true;
+      if (didFinal)  statsEntry.final_status   = true;
+      if (didChamp)  statsEntry.champion_status = true;
+      statsInserts.push(statsEntry);
 
       historyInserts.push({
         speaker_id: spData.id, tournament_id: tournamentId,
