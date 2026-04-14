@@ -264,29 +264,26 @@ export default function SpeakerProfilePage() {
     tournamentId: (h as any).tournament_id ?? "",
   }));
 
-  // Build H2H map
-  const h2hMap: Record<string, { name: string; wins: number; losses: number; ties: number; matches: { tournament: string; round: string; result: string }[] }> = {};
+  // Build H2H map — beraberlikler gösterilmiyor, sadece G/M
+  const h2hMap: Record<string, { name: string; wins: number; losses: number; matches: { tournament: string; round: string; result: string }[] }> = {};
   for (const w of h2hWins) {
     const opp = w.loser?.name ?? "Bilinmiyor";
-    if (!h2hMap[opp]) h2hMap[opp] = { name: opp, wins: 0, losses: 0, ties: 0, matches: [] };
+    if (!h2hMap[opp]) h2hMap[opp] = { name: opp, wins: 0, losses: 0, matches: [] };
     h2hMap[opp].wins += w.round_count;
     h2hMap[opp].matches.push({ tournament: w.tournaments?.name || "Bilinmeyen Turnuva", round: w.round_name || "Bilinmeyen Tur", result: "Galibiyet" });
   }
   for (const l of h2hLosses) {
     const opp = l.winner?.name ?? "Bilinmiyor";
-    if (!h2hMap[opp]) h2hMap[opp] = { name: opp, wins: 0, losses: 0, ties: 0, matches: [] };
+    if (!h2hMap[opp]) h2hMap[opp] = { name: opp, wins: 0, losses: 0, matches: [] };
     h2hMap[opp].losses += l.round_count;
     h2hMap[opp].matches.push({ tournament: l.tournaments?.name || "Bilinmeyen Turnuva", round: l.round_name || "Bilinmeyen Tur", result: "Mağlubiyet" });
   }
-  for (const t of (h2hTies || [])) {
-    const opp = (t as any).winner_id === id ? (t.loser?.name ?? "Bilinmiyor") : (t.winner?.name ?? "Bilinmiyor");
-    if (!h2hMap[opp]) h2hMap[opp] = { name: opp, wins: 0, losses: 0, ties: 0, matches: [] };
-    h2hMap[opp].ties += t.round_count;
-    h2hMap[opp].matches.push({ tournament: t.tournaments?.name || "Bilinmeyen Turnuva", round: t.round_name || "Bilinmeyen Tur", result: "Beraberlik" });
-  }
-  const h2hList = Object.values(h2hMap).sort((a, b) => (b.wins + b.losses + b.ties) - (a.wins + a.losses + a.ties));
+  // Beraberlikler yok sayılıyor — BP'de finalist beraberliği gerçek bir karşılaşma değil
+  const h2hList = Object.values(h2hMap)
+    .filter(r => r.wins > 0 || r.losses > 0)
+    .sort((a, b) => (b.wins + b.losses) - (a.wins + a.losses));
   const initials = speaker.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
-  const totalH2H = h2hWins.reduce((a, w) => a + w.round_count, 0) + h2hLosses.reduce((a, l) => a + l.round_count, 0) + (h2hTies || []).reduce((a: number, t: any) => a + t.round_count, 0);
+  const totalH2H = h2hWins.reduce((a, w) => a + w.round_count, 0) + h2hLosses.reduce((a, l) => a + l.round_count, 0);
 
   // Group roundLogs by tournament_id
   const roundLogsByTournament: Record<string, RoundLog[]> = {};
@@ -385,7 +382,7 @@ export default function SpeakerProfilePage() {
           </h2>
           <div className="space-y-4">
             {h2hList.map((record, i) => {
-              const total = record.wins + record.losses + record.ties;
+              const total = record.wins + record.losses;
               const winPct = total > 0 ? (record.wins / total) * 100 : 0;
               return (
                 <div key={i} className="bg-white/3 rounded-xl p-4 space-y-3">
@@ -395,12 +392,6 @@ export default function SpeakerProfilePage() {
                       <span className="text-green-400 font-bold">{record.wins}G</span>
                       <span className="text-gray-600">/</span>
                       <span className="text-red-400 font-bold">{record.losses}M</span>
-                      {record.ties > 0 && (
-                        <>
-                          <span className="text-gray-600">/</span>
-                          <span className="text-yellow-400 font-bold">{record.ties}B</span>
-                        </>
-                      )}
                     </div>
                     <div className="w-24 hidden sm:block">
                       <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
@@ -419,7 +410,7 @@ export default function SpeakerProfilePage() {
                           <span className="mx-1 opacity-30">•</span>
                           <span>{m.round}</span>
                         </div>
-                        <div className={m.result === "Galibiyet" ? "text-green-500/70" : m.result === "Beraberlik" ? "text-yellow-500/70" : "text-red-500/70"}>
+                        <div className={m.result === "Galibiyet" ? "text-green-500/70" : "text-red-500/70"}>
                           {m.result}
                         </div>
                       </div>
