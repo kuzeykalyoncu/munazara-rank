@@ -552,7 +552,7 @@ export default function AdminPage() {
   }
 
   async function handleResetDb() {
-    if (!confirm("DİKKAT! Tüm hesaplamalar (Elo, H2H, Turnuva geçmişi) sıfırlanacaktır. Turnuva linkleri sabit kalır. Emin misiniz?")) return;
+    if (!confirm("DİKKAT! Tüm hesaplamalar (Elo, H2H, Turnuva geçmişi) sıfırlanacaktır. Turnuva linkleri ve ham veriler sabit kalır. Emin misiniz?")) return;
     
     setLoading(true);
     setStatus("⚠️ Hesaplamalar sıfırlanıyor...");
@@ -561,12 +561,81 @@ export default function AdminPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       
-      setStatus("✅ Hesaplamalar başarıyla sıfırlandı. Aşağıdan turnuvaları KENDİ İSTEDİĞİNİZ TARİH SIRASIYLA yeniden analiz edebilirsiniz.");
+      setStatus("✅ Hesaplamalar başarıyla sıfırlandı. 'Tümünü Yeniden Analiz Et' ile tek tıkta hepsini yeniden hesaplayabilirsiniz.");
       loadTournaments();
     } catch (e: any) {
       setStatus("❌ İşlem hatası: " + e.message);
     }
     setLoading(false);
+  }
+
+  // Tek turnuvayı kayıtlı ham veriyle yeniden analiz et
+  async function handleReprocess(t: Tournament) {
+    if (!t.raw_data) {
+      setStatus(`❌ ${t.name} için kayıtlı veri yok. Önce bu turnuvayı tarıyın ve onaylayın.`);
+      return false;
+    }
+    setLoading(true);
+    setStatus(`⚙️ Yeniden analiz ediliyor: ${t.name}`);
+    try {
+      const res = await fetch("/api/admin/reprocess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tournamentId: t.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setStatus(`✅ ${t.name} yeniden analiz edildi. ${data.processed || ""} konuşmacı güncellendi.`);
+      loadTournaments();
+      return true;
+    } catch (e: any) {
+      setStatus(`❌ ${t.name} hatası: ` + e.message);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Kayıtlı ham verisi olan tüm turnuvaları kronolojik sırayla yeniden analiz et
+  async function handleBulkReprocess() {
+    const withData = [...tournaments]
+      .filter(t => t.raw_data)
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    if (withData.length === 0) {
+      setStatus("❌ Kayıtlı ham verisi olan turnuva yok. Önce turnuvaları tarıyın ve onaylayın.");
+      return;
+    }
+
+    if (!confirm(`${withData.length} turnuva kronolojik sırayla yeniden analiz edilecek. Emin misiniz?`)) return;
+
+    setLoading(true);
+    setSyncProgress({ current: 0, total: withData.length });
+    let successCount = 0;
+
+    for (let i = 0; i < withData.length; i++) {
+      const t = withData[i];
+      setSyncProgress({ current: i + 1, total: withData.length });
+      setStatus(`🔄 Yeniden analiz (${i + 1}/${withData.length}): ${t.name}`);
+
+      try {
+        const res = await fetch("/api/admin/reprocess", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tournamentId: t.id }),
+        });
+        const data = await res.json();
+        if (res.ok) successCount++;
+        else console.error(`${t.name} hatası:`, data.error);
+      } catch (e) {
+        console.error(`${t.name} exception:`, e);
+      }
+    }
+
+    setSyncProgress(null);
+    setLoading(false);
+    setStatus(`🏁 BİTTİ: ${successCount}/${withData.length} turnuva başarıyla yeniden analiz edildi.`);
+    loadTournaments();
   }
 
 
@@ -1146,20 +1215,28 @@ export default function AdminPage() {
             </span>
           </h2>
           
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+            <button
+              onClick={handleBulkReprocess}
+              disabled={loading || tournaments.filter(t => t.raw_data).length === 0}
+              className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 text-sm font-semibold"
+            >
+              <span>⚡</span> Tümünü Yeniden Analiz Et
+              <span className="text-xs opacity-60">({tournaments.filter(t => t.raw_data).length} hazır)</span>
+            </button>
             <button
               onClick={() => handleBulkSync(false)}
               disabled={loading || tournaments.length === 0}
               className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
             >
-              <span>🔄</span> Toplu Senkronizasyon
+              <span>🔄</span> Toplu Tarama+Analiz
             </button>
             <button
               onClick={handleResetDb}
               disabled={loading || tournaments.length === 0}
               className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 text-sm font-semibold"
             >
-              <span>🧨</span> Sadece Hesaplamaları Sıfırla
+              <span>💣</span> Hesaplamaları Sıfırla
             </button>
             <button
               onClick={handleDeleteAllData}
@@ -1198,7 +1275,14 @@ export default function AdminPage() {
                 className="flex items-center justify-between bg-white/3 rounded-xl px-4 py-3 hover:bg-white/5 transition group"
               >
                 <div>
-                  <div className="text-white font-medium">{t.name}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-medium">{t.name}</span>
+                    {t.raw_data && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" title="Ham veri kaydedilmiş — yeniden analiz edilebilir">
+                        💾 Kaydedildi
+                      </span>
+                    )}
+                  </div>
                   <div className="text-gray-500 text-xs font-mono mt-0.5">
                     {t.base_url}
                   </div>
@@ -1211,12 +1295,21 @@ export default function AdminPage() {
                   >
                     <span>📊</span> Excel İndir
                   </a>
+                  {t.raw_data && (
+                    <button
+                      onClick={() => handleReprocess(t)}
+                      disabled={loading}
+                      className="opacity-0 group-hover:opacity-100 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition text-xs font-semibold disabled:opacity-50 hidden sm:flex"
+                    >
+                      <span>⚡</span> Yeniden Analiz Et
+                    </button>
+                  )}
                   <button
                     onClick={() => handleSingleSync(t)}
                     disabled={loading || t.status === "processed"}
                     className="opacity-0 group-hover:opacity-100 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition text-xs font-semibold disabled:opacity-0 hidden sm:flex"
                   >
-                    <span>▶️</span> Analiz Et
+                    <span>▶️</span> Yeniden Tara
                   </button>
                   <span
                     className={`text-xs px-2.5 py-1 rounded-full font-medium ${

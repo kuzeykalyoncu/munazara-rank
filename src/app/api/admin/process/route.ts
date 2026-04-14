@@ -586,6 +586,22 @@ export async function POST(req: NextRequest) {
     const { error: tError } = await supabase.from("tournaments").update({ status: "processed" }).eq("id", tournamentId);
     if (tError) throw new Error("Tournament update error: " + tError.message);
 
+    // Ham veriyi kaydet — hesaplamaları sıfırlayınca bu veri kullanılarak yeniden analiz yapılabilir
+    try {
+      await supabase.from("tournaments").update({
+        raw_data: {
+          speakers: body.speakers,
+          teams: body.teams,
+          results: body.results,
+          breakCount: body.breakCount ?? null,
+          overrideBreaks: body.overrideBreaks ?? {},
+        }
+      }).eq("id", tournamentId);
+    } catch (e) {
+      // raw_data kolonu henüz eklenmemişse sessizce geç
+      console.warn("raw_data kaydedilemedi (kolon yok olabilir):", e);
+    }
+
     return NextResponse.json({ success: true, processed: scraped.length, eloChanges: finalEloChanges, carryBonuses: {} });
   } catch (error: any) {
     console.error("Process error:", error);

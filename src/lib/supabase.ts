@@ -36,6 +36,7 @@ export type Tournament = {
   base_url: string;
   status: "pending" | "processed";
   created_at: string;
+  raw_data?: any | null; // Kaydedilmiş ham veri (konuşmacılar, turlar, break listesi)
 };
 
 export type TournamentStats = {
