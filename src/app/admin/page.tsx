@@ -166,6 +166,10 @@ export default function AdminPage() {
   const [mergeSelections, setMergeSelections] = useState<Record<string, { main: string, subs: string[] }>>({});
   const [isMerging, setIsMerging] = useState(false);
 
+  // Snapshot state
+  const [snapshots, setSnapshots] = useState<{ id: string; label: string; created_at: string }[]>([]);
+  const [showSnapshotPanel, setShowSnapshotPanel] = useState(false);
+
   useEffect(() => {
     checkAuth();
   }, []);
@@ -654,6 +658,54 @@ export default function AdminPage() {
       loadAliases();
     } catch (e: any) {
       setStatus("❌ İşlem hatası: " + e.message);
+    }
+    setLoading(false);
+  }
+
+  async function loadSnapshots() {
+    try {
+      const res = await fetch("/api/admin/snapshot");
+      const data = await res.json();
+      if (data.snapshots) setSnapshots(data.snapshots);
+    } catch {}
+  }
+
+  async function handleTakeSnapshot() {
+    const label = `Snapshot — ${new Date().toLocaleString("tr-TR")}`;
+    setLoading(true);
+    setStatus("📸 Snapshot alınıyor...");
+    try {
+      const res = await fetch("/api/admin/snapshot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setStatus(`✅ Snapshot alındı: ${data.speakers} konuşmacı, ${data.eloHistory} ELO kaydı, ${data.tournamentStats} turnuva istatistiği yedeklendi.`);
+      loadSnapshots();
+    } catch (e: any) {
+      setStatus("❌ Snapshot alınamadı: " + e.message);
+    }
+    setLoading(false);
+  }
+
+  async function handleRestoreSnapshot(snapshotId: string, label: string) {
+    if (!confirm(`"${label}" snapshot'ından geri yüklenecek. Mevcut hesaplamalar üzerine yazılacak. Emin misiniz?`)) return;
+    setLoading(true);
+    setStatus("🔄 Snapshot'tan geri yükleniyor...");
+    try {
+      const res = await fetch("/api/admin/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ snapshotId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setStatus(`✅ Geri yüklendi! ${data.restored?.speakers} konuşmacı, ${data.restored?.eloHistory} ELO kaydı, ${data.restored?.tournamentStats} turnuva istatistiği geri yüklendi.`);
+      loadTournaments();
+    } catch (e: any) {
+      setStatus("❌ Geri yükleme hatası: " + e.message);
     }
     setLoading(false);
   }
@@ -1245,8 +1297,52 @@ export default function AdminPage() {
             >
               <span>🗑️</span> Tüm Verileri Sil
             </button>
+            <button
+              onClick={() => { setShowSnapshotPanel(v => !v); if (!showSnapshotPanel) loadSnapshots(); }}
+              disabled={loading}
+              className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 text-sm font-semibold"
+            >
+              <span>📸</span> Snapshot
+            </button>
           </div>
         </div>
+
+        {/* Snapshot Panel */}
+        {showSnapshotPanel && (
+          <div className="mb-6 glass rounded-2xl p-4 border border-cyan-500/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-cyan-400">📸 Yedekleme / Geri Yükleme</span>
+              <button
+                onClick={handleTakeSnapshot}
+                disabled={loading}
+                className="px-4 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 transition text-sm font-semibold disabled:opacity-50"
+              >
+                ⚡ Şimdi Snapshot Al
+              </button>
+            </div>
+            {snapshots.length === 0 ? (
+              <p className="text-gray-500 text-xs text-center py-2">Henüz snapshot yok. Tüm turnuvalar işlenince "Snapshot Al" basın.</p>
+            ) : (
+              <div className="space-y-2">
+                {snapshots.map(s => (
+                  <div key={s.id} className="flex items-center justify-between bg-white/3 rounded-xl px-4 py-2.5">
+                    <div>
+                      <div className="text-sm text-white">{s.label}</div>
+                      <div className="text-xs text-gray-500">{new Date(s.created_at).toLocaleString("tr-TR")}</div>
+                    </div>
+                    <button
+                      onClick={() => handleRestoreSnapshot(s.id, s.label)}
+                      disabled={loading}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition text-xs font-semibold disabled:opacity-50"
+                    >
+                      🔄 Geri Yükle
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {syncProgress && (
           <div className="mb-6 space-y-2">
