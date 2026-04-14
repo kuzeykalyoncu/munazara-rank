@@ -58,11 +58,6 @@ function SpeakerRow({ sp, rank, isUnranked = false }: { sp: Speaker; rank?: numb
       </td>
       <td className={`px-6 py-4 text-right hidden md:table-cell ${isUnranked ? "text-gray-500" : "text-gray-400"}`}>{sp.total_tournaments}</td>
       <td className={`px-6 py-4 text-right hidden md:table-cell ${isUnranked ? "text-gray-500" : "text-gray-400"}`}>{sp.career_avg_speak?.toFixed(1) ?? "—"}</td>
-      <td className="px-6 py-4 text-right hidden lg:table-cell">
-        <span className={isUnranked ? "text-gray-500" : sp.win_rate >= 60 ? "text-green-400" : sp.win_rate >= 40 ? "text-yellow-400" : "text-gray-400"}>
-          {sp.win_rate ? sp.win_rate.toFixed(0) + "%" : "—"}
-        </span>
-      </td>
     </tr>
   );
 }
@@ -150,7 +145,6 @@ export default function LeaderboardPage() {
                 <th className="px-6 py-4 text-right">ELO</th>
                 <th className="px-6 py-4 text-right hidden md:table-cell">Turnuva</th>
                 <th className="px-6 py-4 text-right hidden md:table-cell">Ort. Speak</th>
-                <th className="px-6 py-4 text-right hidden lg:table-cell">Win Rate</th>
               </tr>
             </thead>
             <tbody>
@@ -161,7 +155,7 @@ export default function LeaderboardPage() {
               {unrankedFiltered.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={6} className="px-6 py-2 bg-white/[0.02] border-y border-white/10">
+                    <td colSpan={5} className="px-6 py-2 bg-white/[0.02] border-y border-white/10">
                       <span className="text-xs text-gray-500 uppercase tracking-widest">Unranked — Sıralamaya girmek için 4 turnuva gerekiyor</span>
                     </td>
                   </tr>

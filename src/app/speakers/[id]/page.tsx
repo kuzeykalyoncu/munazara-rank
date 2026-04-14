@@ -333,10 +333,9 @@ export default function SpeakerProfilePage() {
         </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
           <StatCard label="Turnuva" value={speaker.total_tournaments} />
           <StatCard label="Ort. Prelim SP" value={speaker.career_avg_speak?.toFixed(1) ?? "—"} />
-          <StatCard label="Win Rate" value={speaker.win_rate ? speaker.win_rate.toFixed(0) + "%" : "—"} />
           <StatCard label="H2H Maç" value={totalH2H} />
           <StatCard
             label="Break Sayısı"
