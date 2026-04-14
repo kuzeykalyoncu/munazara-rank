@@ -229,6 +229,7 @@ export default function SpeakerProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [auditModal, setAuditModal] = useState<{ tournamentId: string; tournamentName: string; breakStatus: boolean } | null>(null);
+  const [showBreakList, setShowBreakList] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -298,6 +299,15 @@ export default function SpeakerProfilePage() {
   const careerBreaks = speaker.career_break_count ?? speaker.br_count ?? 0;
   const totalBreakBonus = careerBreaks * 5;
 
+  // Break yapılan turnuvalar — break_status true olanlar
+  const breakTournaments = tournamentStats
+    .filter(s => s.break_status)
+    .map(s => ({
+      name: s.tournaments?.name ?? "Bilinmeyen Turnuva",
+      isChamp: s.champion_status,
+      isFinal: s.final_status,
+    }));
+
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
       {/* Back */}
@@ -337,12 +347,39 @@ export default function SpeakerProfilePage() {
           <StatCard label="Turnuva" value={speaker.total_tournaments} />
           <StatCard label="Ort. Prelim SP" value={speaker.career_avg_speak?.toFixed(1) ?? "—"} />
           <StatCard label="H2H Maç" value={totalH2H} />
-          <StatCard
-            label="Break Sayısı"
-            value={careerBreaks}
-            sub={careerBreaks > 0 ? `+${totalBreakBonus} Elo Bonus` : undefined}
-          />
-        </div>
+          {/* Break Sayısı — tıklanabilir */}
+          <div className="relative">
+            <button
+              onClick={() => setShowBreakList(v => !v)}
+              className={`glass rounded-xl p-4 text-center w-full transition hover:ring-1 hover:ring-blue-500/50 ${careerBreaks > 0 ? "cursor-pointer" : "cursor-default"}`}
+            >
+              <div className="text-2xl font-bold text-white">{careerBreaks}</div>
+              <div className="text-gray-400 text-xs mt-0.5">Break Sayısı</div>
+              {careerBreaks > 0 && <div className="text-indigo-400 text-xs mt-1">+{totalBreakBonus} Elo Bonus</div>}
+            </button>
+            {showBreakList && breakTournaments.length > 0 && (
+              <div
+                className="absolute z-50 top-full mt-2 left-0 right-0 glass rounded-xl border border-white/10 shadow-xl overflow-hidden"
+                style={{minWidth: "200px"}}
+              >
+                <div className="px-3 py-2 border-b border-white/10">
+                  <span className="text-xs text-gray-500 uppercase tracking-widest">Break Yapılan Turnuvalar</span>
+                </div>
+                <div className="max-h-60 overflow-y-auto">
+                  {breakTournaments.map((t, i) => (
+                    <div key={i} className="flex items-center justify-between px-3 py-2.5 hover:bg-white/5 border-b border-white/5 last:border-0">
+                      <span className="text-sm text-white truncate flex-1">{t.name}</span>
+                      <div className="flex gap-1 ml-2 shrink-0">
+                        {t.isChamp && <span className="text-xs px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">🏆</span>}
+                        {t.isFinal && !t.isChamp && <span className="text-xs px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400">Final</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
       </div>
 
       {/* ELO Chart */}
