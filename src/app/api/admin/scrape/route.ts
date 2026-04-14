@@ -158,22 +158,47 @@ function parseSpeakers(
       let avg = 0;
 
       // Extract scores from known round columns
+      // Handles: cell.text="76", cell.sort=76 (number), cell.sort="76" (string)
       for (const idx of roundIndices) {
         const cell = row[idx];
-        if (!cell || (!cell.text && typeof cell.sort !== 'number')) {
-          scores.push(0);
-          continue;
-        }
-        const strVal = cell.text ? cell.text.replace(/<[^>]*>/g, "") : String(cell.sort);
+        const rawText = cell?.text ?? "";
+        const rawSort = cell?.sort;
+        // Prefer text, fallback to sort (number or string)
+        const strVal = rawText
+          ? rawText.replace(/<[^>]*>/g, "").trim()
+          : (rawSort !== undefined && rawSort !== null && rawSort !== "")
+            ? String(rawSort).replace(/<[^>]*>/g, "").trim()
+            : "";
+        if (!strVal) { scores.push(0); continue; }
         const val = parseFloat(strVal);
         if (!isNaN(val) && val >= 50 && val <= 100) scores.push(val);
         else scores.push(0);
       }
 
-      if (avgIdx !== -1 && row[avgIdx]?.sort) avg = parseFloat(row[avgIdx].sort);
-      if (totalIdx !== -1 && row[totalIdx]?.sort) total = parseFloat(row[totalIdx].sort);
+      // Avg: prefer sort (number or string), fallback to text (may have <small> tags)
+      if (avgIdx !== -1) {
+        const ac = row[avgIdx];
+        const aSort = ac?.sort;
+        const aText = ac?.text ?? "";
+        const aStr = (aSort !== undefined && aSort !== null && aSort !== "")
+          ? String(aSort).replace(/<[^>]*>/g, "").trim()
+          : aText.replace(/<[^>]*>/g, "").trim();
+        if (aStr) avg = parseFloat(aStr);
+      }
+      if (totalIdx !== -1) {
+        const tc = row[totalIdx];
+        const tSort = tc?.sort;
+        const tText = tc?.text ?? "";
+        const tStr = (tSort !== undefined && tSort !== null && tSort !== "")
+          ? String(tSort).replace(/<[^>]*>/g, "").trim()
+          : tText.replace(/<[^>]*>/g, "").trim();
+        if (tStr) total = parseFloat(tStr);
+      }
 
-      const pointAvg = avg > 0 ? avg : (scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : total / (scores.length || 1));
+      const nonZeroScores = scores.filter(s => s > 0);
+      const pointAvg = avg > 0 ? avg
+        : nonZeroScores.length > 0 ? nonZeroScores.reduce((a, b) => a + b, 0) / nonZeroScores.length
+        : total > 0 ? total / (scores.length || 1) : 0;
       
       if (pointAvg > 0) {
         speakers.push({ name, totalPoints: pointAvg, scores });
