@@ -300,8 +300,24 @@ export default function SpeakerProfilePage() {
   const totalBreakBonus = careerBreaks * 5;
 
   // Break yapılan turnuvalar — break_status true olanlar
+  // Fallback: elo_history toplam delta ile round log toplamı karşılaştır (+5 break bonusu varsa)
+  const roundEloByTournament: Record<string, number> = {};
+  for (const r of (roundLogs || [])) {
+    if (!roundEloByTournament[r.tournament_id]) roundEloByTournament[r.tournament_id] = 0;
+    roundEloByTournament[r.tournament_id] += r.elo_change;
+  }
+
   const breakTournaments = tournamentStats
-    .filter(s => s.break_status)
+    .filter(s => {
+      if (s.break_status === true) return true; // doğrudan kaynak
+      // Fallback: elo_history delta - round toplamı ≥ 4 ise break var
+      const tId = (s as any).tournament_id;
+      const histEntry = eloHistory.find(h => (h as any).tournament_id === tId);
+      if (!histEntry) return false;
+      const histDelta = histEntry.elo_after - histEntry.elo_before;
+      const roundSum = roundEloByTournament[tId] || 0;
+      return (histDelta - roundSum) >= 4; // break bonus tam +5, 1 yuvarlanma payı
+    })
     .map(s => ({
       name: s.tournaments?.name ?? "Bilinmeyen Turnuva",
       isChamp: s.champion_status,
@@ -357,7 +373,7 @@ export default function SpeakerProfilePage() {
               <div className="text-gray-400 text-xs mt-0.5">Break Sayısı</div>
               {careerBreaks > 0 && <div className="text-indigo-400 text-xs mt-1">+{totalBreakBonus} Elo Bonus</div>}
             </button>
-            {showBreakList && breakTournaments.length > 0 && (
+            {showBreakList && careerBreaks > 0 && (
               <div
                 className="absolute z-50 top-full mt-2 left-0 right-0 glass rounded-xl border border-white/10 shadow-xl overflow-hidden"
                 style={{minWidth: "200px"}}
@@ -366,7 +382,7 @@ export default function SpeakerProfilePage() {
                   <span className="text-xs text-gray-500 uppercase tracking-widest">Break Yapılan Turnuvalar</span>
                 </div>
                 <div className="max-h-60 overflow-y-auto">
-                  {breakTournaments.map((t, i) => (
+                  {breakTournaments.length > 0 ? breakTournaments.map((t, i) => (
                     <div key={i} className="flex items-center justify-between px-3 py-2.5 hover:bg-white/5 border-b border-white/5 last:border-0">
                       <span className="text-sm text-white truncate flex-1">{t.name}</span>
                       <div className="flex gap-1 ml-2 shrink-0">
@@ -374,7 +390,11 @@ export default function SpeakerProfilePage() {
                         {t.isFinal && !t.isChamp && <span className="text-xs px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400">Final</span>}
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="px-3 py-4 text-sm text-gray-500 text-center">
+                      Turnuva listesi görüntülenemedi.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
