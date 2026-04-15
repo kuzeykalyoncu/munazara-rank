@@ -7,10 +7,11 @@ import type { Speaker } from "@/lib/supabase";
 function EloBadge({ elo }: { elo: number }) {
   let cls = "text-gray-400 bg-gray-500/10 border-gray-600/40";
   let label = "Başlangıç";
-  if (elo >= 1300) { cls = "text-yellow-300 bg-yellow-500/15 border-yellow-500/30"; label = "Efsane"; }
-  else if (elo >= 1200) { cls = "text-violet-400 bg-violet-500/15 border-violet-500/30"; label = "Grandmaster"; }
-  else if (elo >= 1100) { cls = "text-indigo-400 bg-indigo-500/15 border-indigo-500/30"; label = "Master"; }
-  else if (elo >= 1050) { cls = "text-green-400 bg-green-500/15 border-green-500/30"; label = "Uzman"; }
+  if (elo > 2000)      { cls = "text-yellow-300 bg-yellow-500/15 border-yellow-500/30"; label = "Şampiyon"; }
+  else if (elo >= 1700) { cls = "text-violet-400 bg-violet-500/15 border-violet-500/30"; label = "Uzman"; }
+  else if (elo >= 1400) { cls = "text-indigo-400 bg-indigo-500/15 border-indigo-500/30"; label = "Avantajlı"; }
+  else if (elo >= 1200) { cls = "text-green-400 bg-green-500/15 border-green-500/30"; label = "Yükselen"; }
+  else if (elo >= 1000) { cls = "text-blue-400 bg-blue-500/15 border-blue-500/30"; label = "Standart"; }
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${cls}`}>
       {label}

@@ -307,12 +307,12 @@ EloSonu = EloBaşlangıcı + toplam_prelim_delta + BreakBonus`}
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {[
-            { color: "text-violet-400 border-violet-500 bg-violet-500/10", label: "Şampiyon", range: "≥ 1200" },
-            { color: "text-amber-400 border-amber-500 bg-amber-500/10", label: "Uzman", range: "≥ 1100" },
-            { color: "text-blue-400 border-blue-500 bg-blue-500/10", label: "Avantajlı", range: "≥ 1050" },
-            { color: "text-green-400 border-green-600 bg-green-500/10", label: "Yükselen", range: "≥ 1000" },
-            { color: "text-gray-300 border-gray-600", label: "Standart", range: "≥ 950" },
-            { color: "text-rose-400 border-rose-700 bg-rose-500/10", label: "Başlangıç", range: "< 950" },
+            { color: "text-yellow-300 border-yellow-500 bg-yellow-500/10", label: "🏆 Şampiyon", range: "> 2000" },
+            { color: "text-violet-400 border-violet-500 bg-violet-500/10", label: "💎 Uzman", range: "1700 – 1999" },
+            { color: "text-indigo-400 border-indigo-500 bg-indigo-500/10", label: "⚡ Avantajlı", range: "1400 – 1699" },
+            { color: "text-green-400 border-green-600 bg-green-500/10", label: "📈 Yükselen", range: "1200 – 1399" },
+            { color: "text-blue-400 border-blue-500 bg-blue-500/10", label: "🎯 Standart", range: "1000 – 1199" },
+            { color: "text-gray-400 border-gray-600", label: "🌱 Başlangıç", range: "< 1000" },
           ].map((tier) => (
             <div
               key={tier.label}

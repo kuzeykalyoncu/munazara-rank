@@ -121,9 +121,11 @@ function reconstructScrapeData(editData: EditableData, original: any): any {
 
 function EloTag({ elo }: { elo: number }) {
   let color = "text-gray-400 border-gray-600";
-  if (elo >= 1200) color = "text-violet-400 border-violet-500 bg-violet-500/10";
-  else if (elo >= 1100) color = "text-indigo-400 border-indigo-500 bg-indigo-500/10";
-  else if (elo >= 1050) color = "text-green-400 border-green-500 bg-green-500/10";
+  if (elo > 2000)      color = "text-yellow-300 border-yellow-500 bg-yellow-500/10";
+  else if (elo >= 1700) color = "text-violet-400 border-violet-500 bg-violet-500/10";
+  else if (elo >= 1400) color = "text-indigo-400 border-indigo-500 bg-indigo-500/10";
+  else if (elo >= 1200) color = "text-green-400 border-green-500 bg-green-500/10";
+  else if (elo >= 1000) color = "text-blue-400 border-blue-500 bg-blue-500/10";
 
   return (
     <span className={`text-xs font-mono px-2 py-0.5 rounded-full border ${color}`}>
