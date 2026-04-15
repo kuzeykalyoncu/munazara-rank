@@ -1323,7 +1323,7 @@ export default function AdminPage() {
               </button>
             </div>
             {snapshots.length === 0 ? (
-              <p className="text-gray-500 text-xs text-center py-2">Henüz snapshot yok. Tüm turnuvalar işlenince "Snapshot Al" basın.</p>
+              <p className="text-gray-500 text-xs text-center py-2">Henüz snapshot yok. Tüm turnuvalar işlenince &quot;Snapshot Al&quot; basın.</p>
             ) : (
               <div className="space-y-2">
                 {snapshots.map(s => (
