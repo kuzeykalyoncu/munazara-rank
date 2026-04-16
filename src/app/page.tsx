@@ -153,18 +153,6 @@ export default function LeaderboardPage() {
                 const globalRank = globalRankedSpeakers.findIndex((s) => s.id === sp.id) + 1;
                 return <SpeakerRow key={sp.id} sp={sp} rank={globalRank} />;
               })}
-              {unrankedFiltered.length > 0 && (
-                <>
-                  <tr>
-                    <td colSpan={5} className="px-6 py-2 bg-white/[0.02] border-y border-white/10">
-                      <span className="text-xs text-gray-500 uppercase tracking-widest">Unranked — Sıralamaya girmek için 4 turnuva gerekiyor</span>
-                    </td>
-                  </tr>
-                  {unrankedFiltered.map((sp) => (
-                    <SpeakerRow key={sp.id} sp={sp} isUnranked />
-                  ))}
-                </>
-              )}
             </tbody>
           </table>
         )}
