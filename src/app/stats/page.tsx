@@ -178,81 +178,41 @@ export default function StatsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Top Win Rate */}
-        <div className="glass rounded-2xl p-6">
-          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-            <span className="text-green-400">🏆</span> En Yüksek Kazanma Oranı
-          </h2>
-          <div className="space-y-2">
-            {topWinRate.map((sp, i) => (
-              <Link
-                key={sp.id}
-                href={`/speakers/${sp.id}`}
-                className="flex items-center justify-between bg-white/5 hover:bg-white/10 transition rounded-xl p-3 group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-8 text-center text-gray-500 font-mono text-sm">
-                    {i + 1}.
+      {/* Top Avg Speak */}
+      <div className="glass rounded-2xl p-6">
+        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+          <span className="text-yellow-400">⭐</span> En Yüksek Ortalama Speak
+        </h2>
+        <div className="space-y-2">
+          {topAvgSpeak.map((sp, i) => (
+            <Link
+              key={sp.id}
+              href={`/speakers/${sp.id}`}
+              className="flex items-center justify-between bg-white/5 hover:bg-white/10 transition rounded-xl p-3 group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-8 text-center text-gray-500 font-mono text-sm">
+                  {i + 1}.
+                </div>
+                <div>
+                  <div className="text-white font-medium group-hover:text-yellow-400 transition">
+                    {sp.name}
                   </div>
-                  <div>
-                    <div className="text-white font-medium group-hover:text-green-400 transition">
-                      {sp.name}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-0.5">
-                      {sp.total_tournaments} Turnuva
-                    </div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {sp.total_tournaments} Turnuva
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-green-400 font-bold text-lg">
-                    {sp.win_rate.toFixed(1)}%
-                  </div>
-                  <div className="text-xs text-gray-500 font-mono mt-0.5">
-                    {sp.elo} ELO
-                  </div>
+              </div>
+              <div className="text-right">
+                <div className="text-yellow-400 font-bold text-lg">
+                  {sp.career_avg_speak.toFixed(2)}
                 </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {/* Top Avg Speak */}
-        <div className="glass rounded-2xl p-6">
-          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-            <span className="text-yellow-400">⭐</span> En Yüksek Ortalama Speak
-          </h2>
-          <div className="space-y-2">
-            {topAvgSpeak.map((sp, i) => (
-              <Link
-                key={sp.id}
-                href={`/speakers/${sp.id}`}
-                className="flex items-center justify-between bg-white/5 hover:bg-white/10 transition rounded-xl p-3 group"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="w-8 text-center text-gray-500 font-mono text-sm">
-                    {i + 1}.
-                  </div>
-                  <div>
-                    <div className="text-white font-medium group-hover:text-yellow-400 transition">
-                      {sp.name}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-0.5">
-                      {sp.total_tournaments} Turnuva
-                    </div>
-                  </div>
+                <div className="text-xs text-gray-500 mt-0.5 font-mono">
+                  <EloBadge elo={sp.elo} />
                 </div>
-                <div className="text-right">
-                  <div className="text-yellow-400 font-bold text-lg">
-                    {sp.career_avg_speak.toFixed(2)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-0.5 font-mono">
-                    <EloBadge elo={sp.elo} />
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+              </div>
+            </Link>
+          ))}
         </div>
       </div>
     </div>
