@@ -366,7 +366,7 @@ export default function SpeakerProfilePage() {
           <StatCard label="Ort. Prelim SP" value={speaker.career_avg_speak?.toFixed(1) ?? "—"} />
           <StatCard label="H2H Maç" value={totalH2H} />
           {/* Break Sayısı — tıklanabilir */}
-          <div className="relative">
+          <div className="relative z-50">
             <button
               onClick={() => setShowBreakList(v => !v)}
               className={`glass rounded-xl p-4 text-center w-full transition hover:ring-1 hover:ring-blue-500/50 ${careerBreaks > 0 ? "cursor-pointer" : "cursor-default"}`}
