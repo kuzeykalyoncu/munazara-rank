@@ -300,31 +300,29 @@ export default function SpeakerProfilePage() {
   const careerBreaks = speaker.career_break_count ?? speaker.br_count ?? 0;
   const totalBreakBonus = careerBreaks * 5;
 
-  // Break yapılan turnuvalar — break_status true olanlar
-  // Fallback: round log verisi varsa elo_change farkından break tespiti
-  const roundEloByTournament: Record<string, number> = {};
-  for (const r of (roundLogs || [])) {
-    if (!roundEloByTournament[r.tournament_id]) roundEloByTournament[r.tournament_id] = 0;
-    roundEloByTournament[r.tournament_id] += r.elo_change;
-  }
-
-  const breakTournaments = tournamentStats
-    .filter(s => {
-      if (s.break_status === true) return true;
-      // Fallback: sadece round log verisi olan turnuvalarda heuristic uygula
-      const tId = (s as any).tournament_id;
-      const roundSum = roundEloByTournament[tId]; // undefined ise es gecilir
-      if (roundSum === undefined) return false; // round verisi yok, tahmin yapma
-      const histEntry = eloHistory.find(h => (h as any).tournament_id === tId);
-      if (!histEntry) return false;
-      const histDelta = histEntry.elo_after - histEntry.elo_before;
-      return (histDelta - roundSum) >= 4; // break bonus +5, 1 yuvarlanma payi
-    })
-    .map(s => ({
+  const explicitBreaks = tournamentStats.filter((s) => s.break_status === true);
+  
+  let breakTournaments: { name: string; isChamp: boolean; isFinal: boolean; diff?: number }[] = [];
+  
+  if (explicitBreaks.length > 0) {
+    breakTournaments = explicitBreaks.map((s) => ({
       name: s.tournaments?.name ?? "Bilinmeyen Turnuva",
-      isChamp: s.champion_status,
-      isFinal: s.final_status,
+      isChamp: s.champion_status || false,
+      isFinal: s.final_status || false,
     }));
+  } else if (careerBreaks > 0 && eloHistory.length > 0) {
+    // Fallback: If DB hasn't populated break_status but the speaker has breaks, 
+    // infer the tournaments where they gained the most ELO (break bonus +5 helps).
+    breakTournaments = [...eloHistory]
+      .map((h) => ({
+        name: (h as any).tournaments?.name ?? "Bilinmeyen Turnuva",
+        isChamp: false,
+        isFinal: false,
+        diff: h.elo_after - h.elo_before,
+      }))
+      .sort((a, b) => b.diff - a.diff)
+      .slice(0, careerBreaks);
+  }
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
@@ -334,7 +332,7 @@ export default function SpeakerProfilePage() {
       </Link>
 
       {/* Hero Card */}
-      <div className="glass rounded-2xl p-8 glow-indigo">
+      <div className="glass rounded-2xl p-8 glow-indigo relative z-50">
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
           <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-extrabold text-3xl shadow-xl shadow-indigo-500/40 shrink-0">
             {initials}
