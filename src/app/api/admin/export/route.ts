@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
 
     // ── 6. Create workbook ────────────────────────────────────────────────
     const wb = new ExcelJS.Workbook();
-    wb.creator = "MünazaraRank";
+    wb.creator = "MünazaRank";
     wb.created = new Date();
     wb.modified = new Date();
 

@@ -6,7 +6,7 @@ import Link from 'next/link';
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Münazara Rank | ELO Tracker",
+  title: "MünazaRank | ELO Tracker",
   description:
     "Türk akademik münazara dünyasının ELO sıralama sistemi ve istatistik takip platformu.",
 };
@@ -25,12 +25,12 @@ export default function RootLayout({
                   M
                 </div>
                 <span className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent">
-                  MünazaraRank
+                  MünazaRank
                 </span>
               </Link>
               <div className="flex items-center gap-6">
                 <Link
-                  href="/"
+                  href="/leaderboard"
                   className="text-sm text-gray-400 hover:text-white transition-colors"
                 >
                   Leaderboard
@@ -61,7 +61,7 @@ export default function RootLayout({
           {children}
         </main>
         <footer className="border-t border-white/5 mt-16 py-8 text-center text-gray-600 text-sm">
-          MünazaraRank © {new Date().getFullYear()} — Türk Münazara Topluluğu
+          MünazaRank © {new Date().getFullYear()} — Türk Münazara Topluluğu
           için yapıldı
         </footer>
       </body>

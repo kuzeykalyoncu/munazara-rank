@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Hesaplama Şekli | MünazaraRank",
+  title: "Hesaplama Şekli | MünazaRank",
   description:
-    "MünazaraRank'in Elo puanlama sisteminin matematiksel açıklaması. Dinamik K-faktörü, SP farkı bazlı dağıtım, break bonusu ve beklenen skor hesaplama yöntemlerini keşfedin.",
+    "MünazaRank'in Elo puanlama sisteminin matematiksel açıklaması. Dinamik K-faktörü, SP farkı bazlı dağıtım, break bonusu ve beklenen skor hesaplama yöntemlerini keşfedin.",
 };
 
 export default function MechanicsPage() {
@@ -18,7 +18,7 @@ export default function MechanicsPage() {
           ELO Nasıl Hesaplanır?
         </h1>
         <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-          MünazaraRank&apos;in her adımını şeffaf bir şekilde açıklayan tam teknik döküman.
+          MünazaRank&apos;in her adımını şeffaf bir şekilde açıklayan tam teknik döküman.
           Matematiği kendiniz doğrulayabilirsiniz.
         </p>
       </div>
