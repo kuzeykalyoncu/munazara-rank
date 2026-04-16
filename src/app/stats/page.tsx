@@ -82,17 +82,17 @@ export default function StatsPage() {
     }));
   })();
 
-  // 2. Top Speakers by Win Rate (min 2 tournaments)
-  const topWinRate = [...speakers]
-    .filter((s) => s.total_tournaments >= 1)
+  // 2. Top Speakers by Break Count
+  const topBreaks = [...speakers]
+    .filter((s) => (s.career_break_count || 0) > 0)
     .sort((a, b) => {
-      // If tie, sort by total tournaments
-      if (b.win_rate === a.win_rate) return b.total_tournaments - a.total_tournaments;
-      return b.win_rate - a.win_rate;
+      const breakDiff = (b.career_break_count || 0) - (a.career_break_count || 0);
+      if (breakDiff !== 0) return breakDiff;
+      return b.elo - a.elo;
     })
     .slice(0, 10);
 
-  // 3. Top Speakers by Career Avg Speak (min 2 tournaments)
+  // 3. Top Speakers by Career Avg Speak (min 1 tournament)
   const topAvgSpeak = [...speakers]
     .filter((s) => s.total_tournaments >= 1)
     .sort((a, b) => b.career_avg_speak - a.career_avg_speak)
@@ -178,41 +178,84 @@ export default function StatsPage() {
         </div>
       </div>
 
-      {/* Top Avg Speak */}
-      <div className="glass rounded-2xl p-6">
-        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-          <span className="text-yellow-400">⭐</span> En Yüksek Ortalama Speak
-        </h2>
-        <div className="space-y-2">
-          {topAvgSpeak.map((sp, i) => (
-            <Link
-              key={sp.id}
-              href={`/speakers/${sp.id}`}
-              className="flex items-center justify-between bg-white/5 hover:bg-white/10 transition rounded-xl p-3 group"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-8 text-center text-gray-500 font-mono text-sm">
-                  {i + 1}.
-                </div>
-                <div>
-                  <div className="text-white font-medium group-hover:text-yellow-400 transition">
-                    {sp.name}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Top Breaks */}
+        <div className="glass rounded-2xl p-6">
+          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <span className="text-cyan-400">🔥</span> En Çok Break Yapanlar
+          </h2>
+          <div className="space-y-2">
+            {topBreaks.map((sp, i) => (
+              <Link
+                key={sp.id}
+                href={`/speakers/${sp.id}`}
+                className="flex items-center justify-between bg-white/5 hover:bg-white/10 transition rounded-xl p-3 group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-8 text-center text-gray-500 font-mono text-sm">
+                    {i + 1}.
                   </div>
-                  <div className="text-xs text-gray-400 mt-0.5">
-                    {sp.total_tournaments} Turnuva
+                  <div>
+                    <div className="text-white font-medium group-hover:text-cyan-400 transition">
+                      {sp.name}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {sp.total_tournaments} Turnuva
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="text-yellow-400 font-bold text-lg">
-                  {sp.career_avg_speak.toFixed(2)}
+                <div className="text-right">
+                  <div className="text-cyan-400 font-bold text-lg">
+                    {sp.career_break_count} Break
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5 font-mono">
+                    <EloBadge elo={sp.elo} />
+                  </div>
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5 font-mono">
-                  <EloBadge elo={sp.elo} />
+              </Link>
+            ))}
+            {topBreaks.length === 0 && (
+              <div className="text-center py-4 text-sm text-gray-500">Henüz break verisi yok.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Top Avg Speak */}
+        <div className="glass rounded-2xl p-6">
+          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+            <span className="text-yellow-400">⭐</span> En Yüksek Ortalama Speak
+          </h2>
+          <div className="space-y-2">
+            {topAvgSpeak.map((sp, i) => (
+              <Link
+                key={sp.id}
+                href={`/speakers/${sp.id}`}
+                className="flex items-center justify-between bg-white/5 hover:bg-white/10 transition rounded-xl p-3 group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-8 text-center text-gray-500 font-mono text-sm">
+                    {i + 1}.
+                  </div>
+                  <div>
+                    <div className="text-white font-medium group-hover:text-yellow-400 transition">
+                      {sp.name}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {sp.total_tournaments} Turnuva
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </Link>
-          ))}
+                <div className="text-right">
+                  <div className="text-yellow-400 font-bold text-lg">
+                    {sp.career_avg_speak.toFixed(2)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5 font-mono">
+                    <EloBadge elo={sp.elo} />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
     </div>

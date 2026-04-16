@@ -27,6 +27,7 @@ export type Speaker = {
   win_rate: number;
   career_avg_speak: number;
   prelim_round_count?: number;
+  career_break_count?: number;
   created_at: string;
 };
 
