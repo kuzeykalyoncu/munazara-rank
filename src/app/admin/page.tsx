@@ -165,6 +165,7 @@ export default function AdminPage() {
   const [aliasLoading, setAliasLoading] = useState(false);
 
   const [unrankedSpeakers, setUnrankedSpeakers] = useState<Speaker[]>([]);
+  const [activeMainTab, setActiveMainTab] = useState<"tournaments" | "unranked" | "aliases">("tournaments");
 
   const [aliasClusters, setAliasClusters] = useState<AliasCluster[]>([]);
   const [mergeSelections, setMergeSelections] = useState<Record<string, { main: string, subs: string[] }>>({});
@@ -819,8 +820,38 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* Add Tournament */}
-      <div className="glass rounded-2xl p-6">
+      {/* Main Tabs Container */}
+      <div className="flex flex-wrap gap-2 border-b border-white/10 pb-4">
+        <button
+          onClick={() => setActiveMainTab("tournaments")}
+          className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition flex items-center gap-2 outline-none ${
+            activeMainTab === "tournaments" ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-lg shadow-indigo-500/10" : "bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
+          }`}
+        >
+          <span>🌐</span> Turnuva Ekle ve Analiz Et
+        </button>
+        <button
+          onClick={() => setActiveMainTab("unranked")}
+          className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition flex items-center gap-2 outline-none ${
+            activeMainTab === "unranked" ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-lg shadow-indigo-500/10" : "bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
+          }`}
+        >
+          <span>⚡</span> Manuel Sıralama
+        </button>
+        <button
+          onClick={() => setActiveMainTab("aliases")}
+          className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition flex items-center gap-2 outline-none ${
+            activeMainTab === "aliases" ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-lg shadow-indigo-500/10" : "bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
+          }`}
+        >
+          <span>👥</span> İsim Birleştirme
+        </button>
+      </div>
+
+      {activeMainTab === "tournaments" && (
+        <div className="space-y-8">
+          {/* Add Tournament */}
+          <div className="glass rounded-2xl p-6">
         <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <span className="text-2xl">🌐</span> Yeni Turnuva Ekle
         </h2>
@@ -1463,9 +1494,12 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+        </div>
+      )}
 
-      {/* Force Rank Unranked Speakers */}
+      {activeMainTab === "unranked" && (
       <div className="glass rounded-2xl p-6 border-indigo-500/20">
+        {/* Force Rank Unranked Speakers */}
         <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
           <span className="text-2xl">⚡</span> Manuel Sıralama Ekleme (Unranked)
         </h2>
@@ -1500,9 +1534,11 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+      )}
 
-      {/* Alias Management */}
+      {activeMainTab === "aliases" && (
       <div className="glass rounded-2xl p-6 border-orange-500/20">
+        {/* Alias Management */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <h2 className="text-lg font-semibold text-white flex items-center gap-2">
             <span className="text-2xl">👥</span> İsim Birleştirme (Alias Yönetimi)
@@ -1634,6 +1670,7 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
