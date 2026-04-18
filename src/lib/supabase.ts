@@ -28,6 +28,7 @@ export type Speaker = {
   career_avg_speak: number;
   prelim_round_count?: number;
   career_break_count?: number;
+  force_ranked?: boolean;
   created_at: string;
 };
 

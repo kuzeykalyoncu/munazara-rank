@@ -81,10 +81,10 @@ export default function LeaderboardPage() {
     s.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Ranked (≥ 4 turnuva) ve Unranked (< 4 turnuva) olarak ayır
-  const rankedFiltered = filtered.filter(s => (s.total_tournaments ?? 0) >= UNRANKED_MIN_TOURNAMENTS);
-  const unrankedFiltered = filtered.filter(s => (s.total_tournaments ?? 0) < UNRANKED_MIN_TOURNAMENTS);
-  const globalRankedSpeakers = speakers.filter(s => (s.total_tournaments ?? 0) >= UNRANKED_MIN_TOURNAMENTS);
+  // Ranked (≥ 4 turnuva veya force_ranked) ve Unranked
+  const rankedFiltered = filtered.filter(s => (s.total_tournaments ?? 0) >= UNRANKED_MIN_TOURNAMENTS || s.force_ranked);
+  const unrankedFiltered = filtered.filter(s => (s.total_tournaments ?? 0) < UNRANKED_MIN_TOURNAMENTS && !s.force_ranked);
+  const globalRankedSpeakers = speakers.filter(s => (s.total_tournaments ?? 0) >= UNRANKED_MIN_TOURNAMENTS || s.force_ranked);
 
   return (
     <div className="space-y-8">

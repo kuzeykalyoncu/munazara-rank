@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import type { Tournament } from "@/lib/supabase";
+import type { Tournament, Speaker } from "@/lib/supabase";
 
 export type AliasItem = { name: string; tournaments: number };
 export type AliasCluster = { id: string; items: AliasItem[] };
@@ -164,6 +164,8 @@ export default function AdminPage() {
   const [aliasTarget, setAliasTarget] = useState("");
   const [aliasLoading, setAliasLoading] = useState(false);
 
+  const [unrankedSpeakers, setUnrankedSpeakers] = useState<Speaker[]>([]);
+
   const [aliasClusters, setAliasClusters] = useState<AliasCluster[]>([]);
   const [mergeSelections, setMergeSelections] = useState<Record<string, { main: string, subs: string[] }>>({});
   const [isMerging, setIsMerging] = useState(false);
@@ -180,6 +182,7 @@ export default function AdminPage() {
     if (authed) {
       loadTournaments();
       loadAliases();
+      loadUnrankedSpeakers();
     }
   }, [authed]);
 
@@ -209,6 +212,39 @@ export default function AdminPage() {
       .select("*")
       .order("created_at", { ascending: false });
     if (data) setTournaments(data);
+  }
+
+  async function loadUnrankedSpeakers() {
+    const { data } = await supabase
+      .from("speakers")
+      .select("*")
+      .lt("total_tournaments", 4)
+      .or("force_ranked.is.null,force_ranked.eq.false")
+      .order("elo", { ascending: false });
+    if (data) setUnrankedSpeakers(data);
+  }
+
+  async function handleForceRank(speakerId: string) {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/force-rank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ speakerId })
+      });
+      if (res.ok) {
+        setUnrankedSpeakers(prev => prev.filter(s => s.id !== speakerId));
+        setStatus("Konuşmacı başarıyla Ranked yapıldı.");
+        setTimeout(() => setStatus(""), 3000);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Hata oluştu.");
+      }
+    } catch (err) {
+      alert("Bağlantı hatası.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -1422,6 +1458,43 @@ export default function AdminPage() {
                     {new Date(t.created_at).toLocaleDateString("tr-TR")}
                   </span>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Force Rank Unranked Speakers */}
+      <div className="glass rounded-2xl p-6 border-indigo-500/20">
+        <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+          <span className="text-2xl">⚡</span> Manuel Sıralama Ekleme (Unranked)
+        </h2>
+        
+        {unrankedSpeakers.length === 0 ? (
+          <p className="text-gray-500 text-center py-6">
+            Tüm konuşmacılar sıralamaya girmiş veya henüz yeterli veri yok.
+          </p>
+        ) : (
+          <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
+            {unrankedSpeakers.map((sp) => (
+              <div key={sp.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-white/5 rounded-xl px-4 py-3 hover:bg-white/10 transition">
+                <div className="mb-2 sm:mb-0">
+                  <div className="text-white font-medium">{sp.name}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <EloTag elo={sp.elo} />
+                    <span className="text-xs text-gray-500">
+                      {sp.total_tournaments} Turnuva
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleForceRank(sp.id)}
+                  disabled={loading}
+                  className="px-4 py-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition text-sm font-semibold disabled:opacity-50"
+                  title="Bu kişiyi doğrudan Leaderboard'da listele"
+                >
+                  Leaderboard'a Ekle
+                </button>
               </div>
             ))}
           </div>
