@@ -1493,7 +1493,7 @@ export default function AdminPage() {
                   className="px-4 py-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition text-sm font-semibold disabled:opacity-50"
                   title="Bu kişiyi doğrudan Leaderboard'da listele"
                 >
-                  Leaderboard'a Ekle
+                  Leaderboard&apos;a Ekle
                 </button>
               </div>
             ))}
