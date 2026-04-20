@@ -67,12 +67,24 @@ export async function POST(req: NextRequest) {
       }
     } catch(e) { console.log("Alias table not found or empty."); }
 
+    // Normalize name to Title Case with Turkish locale: "kuzey kalyoncu" → "Kuzey Kalyoncu"
+    function toTitleCase(name: string): string {
+      return name
+        .trim()
+        .split(/\s+/)
+        .map(word => word.charAt(0).toLocaleUpperCase("tr-TR") + word.slice(1).toLocaleLowerCase("tr-TR"))
+        .join(" ");
+    }
+
+    // Apply Title Case first, then alias mapping
     for (const sp of scraped) {
+      sp.name = toTitleCase(sp.name);
       const lower = sp.name.toLowerCase();
       if (aliasMap[lower]) sp.name = aliasMap[lower];
     }
     for (const team of teams) {
       for (let i = 0; i < team.speakers.length; i++) {
+        team.speakers[i] = toTitleCase(team.speakers[i]);
         const lower = team.speakers[i].toLowerCase();
         if (aliasMap[lower]) team.speakers[i] = aliasMap[lower];
       }
