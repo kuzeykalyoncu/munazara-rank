@@ -618,25 +618,31 @@ export default function AdminPage() {
       setStatus(`❌ ${t.name} için kayıtlı veri yok. Önce bu turnuvayı tarıyın ve onaylayın.`);
       return false;
     }
-    setLoading(true);
-    setStatus(`⚙️ Yeniden analiz ediliyor: ${t.name}`);
-    try {
-      const res = await fetch("/api/admin/reprocess", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tournamentId: t.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setStatus(`✅ ${t.name} yeniden analiz edildi. ${data.processed || ""} konuşmacı güncellendi.`);
-      loadTournaments();
-      return true;
-    } catch (e: any) {
-      setStatus(`❌ ${t.name} hatası: ` + e.message);
-      return false;
-    } finally {
-      setLoading(false);
-    }
+
+    // Load raw data into the editable preview UI so user can inspect/correct before processing
+    const rd = t.raw_data as any;
+    setCurrentTournamentId(t.id);
+
+    // Build a synthetic scrapePreview from raw_data
+    const syntheticPreview = {
+      tournamentName: t.name,
+      speakers: rd.speakers || [],
+      teams: rd.teams || [],
+      results: rd.results || { rooms: [], breaks: [], finalists: [], champions: [], bestSpeakers: [] },
+      warnings: [],
+      inferredBreakCount: rd.breakCount || rd.results?.breaks?.length || 0,
+    };
+    setScrapePreview(syntheticPreview);
+
+    // Populate break count input and open the editable sheet
+    const inferredCount = rd.breakCount || rd.results?.breaks?.length || 0;
+    setBreakCountInput(String(inferredCount));
+    setEditableData(buildEditableData(syntheticPreview, inferredCount));
+    setActiveRoundTab(0);
+
+    // Scroll to the editable sheet
+    setStatus(`📋 ${t.name} verisi yüklendi. Kontrol edip ELO Önizle butonuna basın.`);
+    return true;
   }
 
   // Kayıtlı ham verisi olan tüm turnuvaları kronolojik sırayla yeniden analiz et

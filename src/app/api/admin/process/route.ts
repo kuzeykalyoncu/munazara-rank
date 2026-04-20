@@ -323,8 +323,12 @@ export async function POST(req: NextRequest) {
           if (!isOutroundFlag) {
             sp1 = scraped.find(x => x.name === s1.name)?.scores[r1Idx] || 0;
             sp2 = scraped.find(x => x.name === s2.name)?.scores[r2Idx] || 0;
-            s1.prelimSpeakTotal += sp1; s1.prelimRoundCount += 1;
-            s2.prelimSpeakTotal += sp2; s2.prelimRoundCount += 1;
+            // Iron check: if one speaker has sp=0 and the other has sp>0, the absent speaker
+            // did NOT play this round. Only count rounds where the speaker actually participated.
+            const s1Played = sp1 > 0 || sp2 === 0; // s1 played if they have SP, or if neither has SP (both 0)
+            const s2Played = sp2 > 0 || sp1 === 0; // s2 played if they have SP, or if neither has SP (both 0)
+            if (s1Played) { s1.prelimSpeakTotal += sp1; s1.prelimRoundCount += 1; }
+            if (s2Played) { s2.prelimSpeakTotal += sp2; s2.prelimRoundCount += 1; }
             speakerPrelimIdx[s1.name] = r1Idx + 1;
             speakerPrelimIdx[s2.name] = r2Idx + 1;
           }
