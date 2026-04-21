@@ -109,22 +109,9 @@ export default function ManualTournamentWizard({ loading, setLoading, setStatus,
   const currentNum = steps.indexOf(step) + 1;
 
   // ── Handlers ─────────────────────────────────────────────────────────────
-  async function handleNameNext() {
+  function handleNameNext() {
     if (!name.trim()) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("tournaments")
-        .insert({ name: name.trim(), base_url: "manual", status: "pending" })
-        .select("id").single();
-      if (error) throw error;
-      setTournamentId((data as any).id);
-      setStep("upload");
-    } catch (e: any) {
-      setStatus("❌ Turnuva oluşturulamadı: " + e.message);
-    } finally {
-      setLoading(false);
-    }
+    setStep("upload");
   }
 
   async function handleParseTabs() {
@@ -150,13 +137,13 @@ export default function ManualTournamentWizard({ loading, setLoading, setStatus,
   }
 
   async function handlePreview() {
-    if (!tournamentId || !champion || finalists.length < 2) return;
+    if (!name || !champion || finalists.length < 2) return;
     setLoading(true);
     try {
       const res = await fetch("/api/admin/process-manual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tournamentId, speakers: parsedSpeakers, teams: parsedTeams, finalists, champion, bestSpeaker, numRounds, dryRun: true }),
+        body: JSON.stringify({ tournamentName: name, speakers: parsedSpeakers, teams: parsedTeams, finalists, champion, bestSpeaker, numRounds, dryRun: true }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -170,13 +157,13 @@ export default function ManualTournamentWizard({ loading, setLoading, setStatus,
   }
 
   async function handleConfirm() {
-    if (!tournamentId) return;
+    if (!name) return;
     setLoading(true);
     try {
       const res = await fetch("/api/admin/process-manual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tournamentId, speakers: parsedSpeakers, teams: parsedTeams, finalists, champion, bestSpeaker, numRounds, dryRun: false }),
+        body: JSON.stringify({ tournamentName: name, speakers: parsedSpeakers, teams: parsedTeams, finalists, champion, bestSpeaker, numRounds, dryRun: false }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);

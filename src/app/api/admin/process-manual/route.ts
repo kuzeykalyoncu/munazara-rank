@@ -3,7 +3,8 @@ import { supabase } from "@/lib/supabase";
 import type { ParsedSpeaker, ParsedTeam } from "../parse-tab/route";
 
 interface ProcessManualInput {
-  tournamentId: string;
+  tournamentId?: string;
+  tournamentName?: string;
   speakers: ParsedSpeaker[];
   teams: ParsedTeam[];          // each team has rankScores[] per round (0-3)
   finalists: string[];          // team names of the 4 finalists
@@ -32,10 +33,24 @@ function toTitleCase(name: string): string {
 export async function POST(req: NextRequest) {
   try {
     const body: ProcessManualInput = await req.json();
-    const { tournamentId, speakers: rawSpeakers, teams: rawTeams, finalists, champion, bestSpeaker, numRounds, dryRun = false } = body;
+    const { tournamentId, tournamentName, speakers: rawSpeakers, teams: rawTeams, finalists, champion, bestSpeaker, numRounds, dryRun = false } = body;
 
-    if (!tournamentId || !rawSpeakers || !rawTeams) {
+    if (!rawSpeakers || !rawTeams) {
       return NextResponse.json({ error: "Eksik veri." }, { status: 400 });
+    }
+
+    let tId = tournamentId;
+    if (!dryRun) {
+      if (!tId && tournamentName) {
+        const { data, error } = await supabase.from("tournaments").insert({
+          name: tournamentName,
+          base_url: "manual",
+          status: "pending"
+        }).select("id").single();
+        if (error) throw new Error("Turnuva oluşturulamadı: " + error.message);
+        tId = data.id;
+      }
+      if (!tId) return NextResponse.json({ error: "Turnuva ID veya Adı eksik" }, { status: 400 });
     }
 
     // 0. Alias mapping
@@ -206,7 +221,7 @@ export async function POST(req: NextRequest) {
           }
 
           roundLogInserts.push({
-            speaker_id: sp.id, tournament_id: tournamentId,
+            speaker_id: sp.id, tournament_id: tId,
             round_name: `Tur ${r + 1}`, is_outround: false,
             placement: 4 - rank, // rank 3 → 1st place, rank 0 → 4th place
             own_sp: played ? spScore : null,
@@ -284,13 +299,13 @@ export async function POST(req: NextRequest) {
             if (!spB) continue;
             if (SA > SB) {
               spA.pairwiseWins++; spB.pairwiseLosses++;
-              h2hRecords.push({ winner_id: spA.id, loser_id: spB.id, tournament_id: tournamentId, round_name: "Final", round_count: 1, is_tie: false });
+              h2hRecords.push({ winner_id: spA.id, loser_id: spB.id, tournament_id: tId, round_name: "Final", round_count: 1, is_tie: false });
             } else if (SA < SB) {
               spB.pairwiseWins++; spA.pairwiseLosses++;
-              h2hRecords.push({ winner_id: spB.id, loser_id: spA.id, tournament_id: tournamentId, round_name: "Final", round_count: 1, is_tie: false });
+              h2hRecords.push({ winner_id: spB.id, loser_id: spA.id, tournament_id: tId, round_name: "Final", round_count: 1, is_tie: false });
             } else {
               spA.pairwiseTies++; spB.pairwiseTies++;
-              h2hRecords.push({ winner_id: spA.id, loser_id: spB.id, tournament_id: tournamentId, round_name: "Final", round_count: 1, is_tie: true });
+              h2hRecords.push({ winner_id: spA.id, loser_id: spB.id, tournament_id: tId, round_name: "Final", round_count: 1, is_tie: true });
             }
           }
         }
@@ -344,7 +359,7 @@ export async function POST(req: NextRequest) {
       const isBestSpeaker = sp.name === bestSpeakerNorm;
 
       const statsEntry: any = {
-        tournament_id: tournamentId, speaker_id: sp.id,
+        tournament_id: tId, speaker_id: sp.id,
         speak_avg: sp.prelimRoundCount > 0 ? Math.round(sp.prelimSpeakTotal / sp.prelimRoundCount * 100) / 100 : 0,
         partner_id: null, elo_change: finalEloChanges[sp.name], carry_bonus: 0,
         best_speaker_status: isBestSpeaker,
@@ -355,7 +370,7 @@ export async function POST(req: NextRequest) {
       statsInserts.push(statsEntry);
 
       historyInserts.push({
-        speaker_id: sp.id, tournament_id: tournamentId,
+        speaker_id: sp.id, tournament_id: tId,
         elo_before: Math.round(sp.elo - sp.eloChange),
         elo_after: Math.round(sp.elo),
       });
@@ -400,12 +415,12 @@ export async function POST(req: NextRequest) {
       if (error) throw new Error(`Speaker update error (${id}): ` + error.message);
     }
 
-    await supabase.from("tournaments").update({ status: "processed" }).eq("id", tournamentId);
+    await supabase.from("tournaments").update({ status: "processed" }).eq("id", tId);
 
     // Save raw data for reprocess
     await supabase.from("tournaments").update({
       raw_data: { speakers: rawSpeakers, teams: rawTeams, finalists, champion, bestSpeaker, numRounds, isManual: true }
-    }).eq("id", tournamentId);
+    }).eq("id", tId);
 
     return NextResponse.json({ success: true, processed: Object.keys(speakerMap).length, eloChanges: finalEloChanges });
   } catch (error: any) {

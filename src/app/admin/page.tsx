@@ -611,6 +611,27 @@ export default function AdminPage() {
     await handleScrape(undefined, t.base_url);
   }
 
+  async function handleDeleteTournament(t: Tournament) {
+    if (!confirm(`DİKKAT! "${t.name}" adlı turnuvayı ve ilgili tüm verilerini (ELO değişimleri, round kayıtları vb.) kalıcı olarak silmek istediğinize emin misiniz?`)) return;
+    setLoading(true);
+    setStatus(`🗑️ "${t.name}" siliniyor...`);
+    try {
+      const res = await fetch("/api/admin/delete-tournament", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tournamentId: t.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      setStatus(`✅ "${t.name}" başarıyla silindi. (Hesaplamaları senkronize etmek için 'Hesaplamaları Sıfırla' ve 'Tümünü Yeniden Analiz Et' işlemlerini yapmanız önerilir.)`);
+      loadTournaments();
+    } catch (e: any) {
+      setStatus("❌ İşlem hatası: " + e.message);
+    }
+    setLoading(false);
+  }
+
   async function handleResetDb() {
     if (!confirm("DİKKAT! Tüm hesaplamalar (Elo, H2H, Turnuva geçmişi) sıfırlanacaktır. Turnuva linkleri ve ham veriler sabit kalır. Emin misiniz?")) return;
     
@@ -918,6 +939,20 @@ export default function AdminPage() {
           </button>
         </form>
 
+      </div>
+          )} {/* end addMode === tabbycat */}
+
+          {/* ── Manuel Turnuva Wizard ── */}
+          {addMode === "manual" && (
+            <ManualTournamentWizard
+              loading={loading}
+              setLoading={setLoading}
+              setStatus={setStatus}
+              onDone={() => { loadTournaments(); setAddMode("tabbycat"); }}
+            />
+          )}
+
+        {/* Global Status Message */}
         {status && (
           <div
             className={`mt-4 px-4 py-3 rounded-lg text-sm border ${
@@ -931,18 +966,6 @@ export default function AdminPage() {
             {status}
           </div>
         )}
-      </div>
-          )} {/* end addMode === tabbycat */}
-
-          {/* ── Manuel Turnuva Wizard ── */}
-          {addMode === "manual" && (
-            <ManualTournamentWizard
-              loading={loading}
-              setLoading={setLoading}
-              setStatus={setStatus}
-              onDone={() => { loadTournaments(); setAddMode("tabbycat"); }}
-            />
-          )}
 
       {/* ── Break Count Dialog ── */}
       {showBreakDialog && scrapePreview && (
@@ -1521,6 +1544,14 @@ export default function AdminPage() {
                     className="opacity-0 group-hover:opacity-100 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition text-xs font-semibold disabled:opacity-0 hidden sm:flex"
                   >
                     <span>▶️</span> Yeniden Tara
+                  </button>
+                  <button
+                    onClick={() => handleDeleteTournament(t)}
+                    disabled={loading}
+                    className="opacity-0 group-hover:opacity-100 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition text-xs font-semibold disabled:opacity-50 hidden sm:flex"
+                    title="Turnuvayı Sil"
+                  >
+                    <span className="text-sm leading-none">🗑️</span>
                   </button>
                   <span
                     className={`text-xs px-2.5 py-1 rounded-full font-medium ${
