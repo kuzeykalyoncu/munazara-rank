@@ -1480,7 +1480,7 @@ export default function AdminPage() {
           </p>
         ) : (
           <div className="space-y-2">
-            {tournaments.map((t) => (
+            {tournaments.filter(t => addMode === "manual" ? t.base_url === "manual" : t.base_url !== "manual").map((t) => (
               <div
                 key={t.id}
                 className="flex items-center justify-between bg-white/3 rounded-xl px-4 py-3 hover:bg-white/5 transition group"
