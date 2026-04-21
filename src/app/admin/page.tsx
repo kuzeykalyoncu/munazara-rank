@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import type { Tournament, Speaker } from "@/lib/supabase";
+import ManualTournamentWizard from "./ManualTournamentWizard";
 
 export type AliasItem = { name: string; tournaments: number };
 export type AliasCluster = { id: string; items: AliasItem[] };
@@ -166,6 +167,22 @@ export default function AdminPage() {
 
   const [unrankedSpeakers, setUnrankedSpeakers] = useState<Speaker[]>([]);
   const [activeMainTab, setActiveMainTab] = useState<"tournaments" | "unranked" | "aliases">("tournaments");
+
+  // ── Manuel Turnuva Wizard ──────────────────────────────────────────────
+  const [addMode, setAddMode] = useState<"tabbycat" | "manual">("tabbycat");
+  const [manualStep, setManualStep] = useState(0); // 0=name, 1=speakerTab, 2=teamTab, 3=finals, 4=preview
+  const [manualName, setManualName] = useState("");
+  const [manualNumRounds, setManualNumRounds] = useState(5);
+  const [manualSpeakerText, setManualSpeakerText] = useState("");
+  const [manualTeamText, setManualTeamText] = useState("");
+  const [manualParsedSpeakers, setManualParsedSpeakers] = useState<any[]>([]);
+  const [manualParsedTeams, setManualParsedTeams] = useState<any[]>([]);
+  const [manualParseWarnings, setManualParseWarnings] = useState<string[]>([]);
+  const [manualFinalists, setManualFinalists] = useState<string[]>([]);
+  const [manualChampion, setManualChampion] = useState("");
+  const [manualBestSpeaker, setManualBestSpeaker] = useState("");
+  const [manualPreview, setManualPreview] = useState<any[] | null>(null);
+  const [manualTournamentId, setManualTournamentId] = useState<string | null>(null);
 
   const [aliasClusters, setAliasClusters] = useState<AliasCluster[]>([]);
   const [mergeSelections, setMergeSelections] = useState<Record<string, { main: string, subs: string[] }>>({});
@@ -856,7 +873,19 @@ export default function AdminPage() {
 
       {activeMainTab === "tournaments" && (
         <div className="space-y-8">
-          {/* Add Tournament */}
+
+          {/* Mode Toggle */}
+          <div className="flex gap-3">
+            <button onClick={() => setAddMode("tabbycat")} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition flex items-center justify-center gap-2 ${addMode === "tabbycat" ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30" : "bg-white/5 text-gray-400 border-white/10 hover:bg-white/10"}` }>
+              🌐 Tabbycat Linki
+            </button>
+            <button onClick={() => setAddMode("manual")} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition flex items-center justify-center gap-2 ${addMode === "manual" ? "bg-violet-500/20 text-violet-300 border-violet-500/30" : "bg-white/5 text-gray-400 border-white/10 hover:bg-white/10"}`}>
+              📋 Manuel Tab Girişi
+            </button>
+          </div>
+
+          {/* Add Tournament — Tabbycat */}
+          {addMode === "tabbycat" && (
           <div className="glass rounded-2xl p-6">
         <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <span className="text-2xl">🌐</span> Yeni Turnuva Ekle
@@ -903,6 +932,17 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+          )} {/* end addMode === tabbycat */}
+
+          {/* ── Manuel Turnuva Wizard ── */}
+          {addMode === "manual" && (
+            <ManualTournamentWizard
+              loading={loading}
+              setLoading={setLoading}
+              setStatus={setStatus}
+              onDone={() => { loadTournaments(); setAddMode("tabbycat"); }}
+            />
+          )}
 
       {/* ── Break Count Dialog ── */}
       {showBreakDialog && scrapePreview && (
