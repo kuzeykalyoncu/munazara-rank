@@ -24,16 +24,37 @@ function PdfDropZone({ label, hint, onExtracted, extracted }: {
   const [fileName, setFileName] = useState("");
 
   async function extractPdf(file: File) {
-    if (!file.name.toLowerCase().endsWith(".pdf")) return;
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      alert("Lütfen sadece PDF dosyası yükleyin.");
+      return;
+    }
     setExtracting(true);
     setFileName(file.name);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/admin/extract-pdf", { method: "POST", body: form });
-      const { text, error } = await res.json();
-      if (error) throw new Error(error);
-      onExtracted(text || "");
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = '';
+      
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const items = content.items.map((item: any) => ({ str: item.str, x: item.transform[4], y: item.transform[5] }));
+        items.sort((a, b) => Math.abs(a.y - b.y) < 5 ? a.x - b.x : b.y - a.y);
+
+        let lastY = null;
+        for (const item of items) {
+          if (!item.str.trim()) continue;
+          if (lastY !== null && Math.abs(item.y - lastY) > 5) fullText += '\n';
+          else if (lastY !== null) fullText += ' ';
+          fullText += item.str.trim();
+          lastY = item.y;
+        }
+        fullText += '\n\n';
+      }
+      onExtracted(fullText);
     } catch (e: any) {
       alert("PDF okunurken hata: " + e.message);
     } finally {
@@ -46,7 +67,7 @@ function PdfDropZone({ label, hint, onExtracted, extracted }: {
     setDragging(false);
     const file = e.dataTransfer.files[0];
     if (file) extractPdf(file);
-  }, []);
+  }, []); // Removed missing extractPdf from deps intentionally since it contains closure refs
 
   return (
     <div>
