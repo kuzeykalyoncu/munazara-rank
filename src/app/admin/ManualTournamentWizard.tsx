@@ -42,25 +42,57 @@ function PdfDropZone({ label, hint, onExtracted, extracted }: {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
         
-        // Quantize Y to nearest 3 pixels to group items on the same visual line safely
-        const items = content.items.map((item: any) => ({ 
-          str: item.str, 
-          x: item.transform[4], 
-          roundedY: Math.round(item.transform[5] / 3) * 3 
-        }));
-        
-        // Proper transitive sort: first by Y descending, then by X ascending
-        items.sort((a, b) => b.roundedY - a.roundedY || a.x - b.x);
+        // Filter out empty items
+        const items = content.items
+          .map((item: any) => ({ str: item.str, x: item.transform[4], y: item.transform[5] }))
+          .filter((item: any) => item.str.trim());
+          
+        if (items.length === 0) continue;
 
-        let lastY = null;
+        // Find the left-most anchor column to determine row boundaries
+        const minX = Math.min(...items.map((i: any) => i.x));
+        
+        // Tokens near the left margin that are numbers (like rank 1, 2, 3...)
+        const positionTokens = items.filter((i: any) => i.x < minX + 25 && /^\d+/.test(i.str));
+        
+        // Sort anchors top to bottom
+        positionTokens.sort((a, b) => b.y - a.y);
+        
+        const rows = positionTokens.map((pt: any) => ({ y: pt.y, items: [] as any[] }));
+        
+        // Assign every item to its nearest vertical row anchor
         for (const item of items) {
-          if (!item.str.trim()) continue;
-          if (lastY !== null && Math.abs(item.roundedY - lastY) > 0) fullText += '\n';
-          else if (lastY !== null) fullText += ' ';
-          fullText += item.str.trim();
-          lastY = item.roundedY;
+          if (!rows.length) {
+            fullText += item.str + " ";
+            continue;
+          }
+          let closestRow = rows[0];
+          let minDiff = Math.abs(item.y - closestRow.y);
+          for(const row of rows) {
+            const diff = Math.abs(item.y - row.y);
+            if (diff < minDiff) { 
+              minDiff = diff; 
+              closestRow = row; 
+            }
+          }
+          // Only assign if it visually belongs to the row (within 30px vertically)
+          if (minDiff < 30) {
+            closestRow.items.push(item);
+          }
         }
-        fullText += '\n\n';
+        
+        // Sort items left-to-right within each row. If directly stacked, order top-to-bottom.
+        for (const row of rows) {
+           row.items.sort((a: any, b: any) => {
+             const diffX = a.x - b.x;
+             if (Math.abs(diffX) < 10) {
+                 return b.y - a.y; // top first
+             }
+             return diffX;
+           });
+           
+           fullText += row.items.map((i: any) => i.str).join(" ") + '\n';
+        }
       }
       onExtracted(fullText);
     } catch (e: any) {
