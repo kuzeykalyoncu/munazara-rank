@@ -41,16 +41,24 @@ function PdfDropZone({ label, hint, onExtracted, extracted }: {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        const items = content.items.map((item: any) => ({ str: item.str, x: item.transform[4], y: item.transform[5] }));
-        items.sort((a, b) => Math.abs(a.y - b.y) < 5 ? a.x - b.x : b.y - a.y);
+        
+        // Quantize Y to nearest 3 pixels to group items on the same visual line safely
+        const items = content.items.map((item: any) => ({ 
+          str: item.str, 
+          x: item.transform[4], 
+          roundedY: Math.round(item.transform[5] / 3) * 3 
+        }));
+        
+        // Proper transitive sort: first by Y descending, then by X ascending
+        items.sort((a, b) => b.roundedY - a.roundedY || a.x - b.x);
 
         let lastY = null;
         for (const item of items) {
           if (!item.str.trim()) continue;
-          if (lastY !== null && Math.abs(item.y - lastY) > 5) fullText += '\n';
+          if (lastY !== null && Math.abs(item.roundedY - lastY) > 0) fullText += '\n';
           else if (lastY !== null) fullText += ' ';
           fullText += item.str.trim();
-          lastY = item.y;
+          lastY = item.roundedY;
         }
         fullText += '\n\n';
       }

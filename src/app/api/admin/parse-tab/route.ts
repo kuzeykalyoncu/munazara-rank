@@ -53,52 +53,73 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// ── Helper to extract end numbers ───────────────────────────────────────────
+function extractLineParts(line: string, expectedNumbersCount: number): { position: number, nameBlob: string, numTokens: number[] } | null {
+  // First extract the position (e.g. "1", "1=", "3")
+  const posMatch = line.match(/^(\d+)[=a-zA-Z]*\s+(.*)/);
+  if (!posMatch) return null;
+  const position = parseInt(posMatch[1]);
+  const rest = posMatch[2];
+
+  // Extract all numbers at the end of the line
+  const numMatch = rest.match(/(?:(?:^|\s+)\d+(?:\.\d+)?)+$/);
+  if (!numMatch) return null;
+
+  const numPartStr = numMatch[0].trim();
+  const allTokens = numPartStr.split(/\s+/);
+  
+  // If we matched more numbers than expected, the extra numbers on the left belong to the name
+  let nameBlob = rest.slice(0, rest.length - numMatch[0].length).trim();
+  let numTokens = allTokens.map(Number);
+  
+  if (numTokens.length > expectedNumbersCount) {
+    const extraCount = numTokens.length - expectedNumbersCount;
+    const extraNums = allTokens.slice(0, extraCount);
+    nameBlob = nameBlob ? nameBlob + " " + extraNums.join(" ") : extraNums.join(" ");
+    numTokens = numTokens.slice(extraCount);
+  } else if (numTokens.length < expectedNumbersCount) {
+    // If fewer than expected (due to missing 0s), pad with 0s at the end (assume trailing scores missing)
+    while (numTokens.length < expectedNumbersCount) {
+      numTokens.push(0);
+    }
+  }
+
+  return { position, nameBlob, numTokens };
+}
+
 // ── Team Tab Parser ──────────────────────────────────────────────────────────
 function parseTeamTab(text: string, numRounds: number, warnings: string[]): ParsedTeam[] {
   const teams: ParsedTeam[] = [];
   const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
 
-  // How many tokens from the right are fixed:
-  // numRounds rank scores + numRounds speaker scores + pullups + totalSpeaker + totalRank = 2*numRounds + 3
+  // fixedRight variables: [totalRank, totalSpeaker, pullups, ...speakerScores, ...rankScores]
   const fixedRight = 2 * numRounds + 3;
 
   for (const line of lines) {
-    const tokens = line.split(/\s+/);
-    if (tokens.length < fixedRight + 2) continue; // need at least position + 1 team name word
+    const parts = extractLineParts(line, fixedRight);
+    if (!parts) continue;
+    const { position, nameBlob: teamName, numTokens } = parts;
 
-    // First token: position
-    const position = parseInt(tokens[0]);
-    if (isNaN(position)) continue; // skip header row
+    // Tokens: [totalRank, totalSpeaker, pullups, SP_R1..RN, Rank_R1..RN]  (assuming left-to-right from the end blob)
+    // Wait, the PDF prints (left to right): Rank total, SP total, pullups, (SpR1..RN), (RankR1..RN)
+    // But Tabbycat outputs:
+    // "1    OPEN Take Me To Mosque  12    752  1        148 146 150 154 154  2 2 2 3 3"
+    // So mapping is: 0: Rank=12, 1: SP=752, 2: PU=1, [3..3+numR-1]: SpScores, [rest]: RankScores
+    
+    // We already aligned numTokens to be exactly fixedRight in length
+    const totalRank = numTokens[0];
+    const totalSpeaker = numTokens[1];
+    const pullups = numTokens[2];
+    
+    const speakerScores = numTokens.slice(3, 3 + numRounds);
+    const rankScores = numTokens.slice(3 + numRounds, 3 + 2 * numRounds);
 
-    // From right: numRounds rank scores
-    const rankScores: number[] = [];
-    for (let i = 0; i < numRounds; i++) {
-      rankScores.unshift(parseFloat(tokens[tokens.length - 1 - i]));
-    }
-
-    // Next numRounds: speaker scores per round
-    const speakerScores: number[] = [];
-    for (let i = 0; i < numRounds; i++) {
-      speakerScores.unshift(parseFloat(tokens[tokens.length - numRounds - 1 - i]));
-    }
-
-    const pullups = parseInt(tokens[tokens.length - 2 * numRounds - 1]);
-    const totalSpeaker = parseInt(tokens[tokens.length - 2 * numRounds - 2]);
-    const totalRank = parseInt(tokens[tokens.length - 2 * numRounds - 3]);
-
-    if (isNaN(totalSpeaker) || isNaN(totalRank)) {
-      warnings.push(`Satır parse edilemedi: "${line.slice(0, 60)}..."`);
-      continue;
-    }
-
-    // Team name = tokens between position and fixedRight section
-    const teamName = tokens.slice(1, tokens.length - fixedRight).join(" ").trim();
     if (!teamName) {
       warnings.push(`Takım ismi bulunamadı: "${line.slice(0, 60)}"`);
       continue;
     }
 
-    teams.push({ position, teamName, totalRank, totalSpeaker, pullups: pullups || 0, speakerScores, rankScores, speakers: [] });
+    teams.push({ position, teamName, totalRank, totalSpeaker, pullups, speakerScores, rankScores, speakers: [] });
   }
 
   return teams;
@@ -109,36 +130,25 @@ function parseSpeakerTab(text: string, numRounds: number, knownTeams: string[], 
   const speakers: ParsedSpeaker[] = [];
   const lines = text.split("\n").map(l => l.trim()).filter(l => l.length > 0);
 
-  // Fixed right: numRounds scores + 1 total = numRounds + 1
-  const fixedRight = numRounds + 1;
-
-  // Sort teams longest-first so we match greedily (e.g. "HACETTEPE Chivas Regal 18" before "HACETTEPE")
+  const fixedRight = numRounds + 1; // total + numRounds scores
   const sortedTeams = [...knownTeams].sort((a, b) => b.length - a.length);
 
   for (const line of lines) {
-    const tokens = line.split(/\s+/);
-    if (tokens.length < fixedRight + 2) continue;
+    const parts = extractLineParts(line, fixedRight);
+    if (!parts) continue;
+    const { position, nameBlob: blob, numTokens } = parts;
 
-    const position = parseInt(tokens[0]);
-    if (isNaN(position)) continue;
+    // tab output: total, R1..RN
+    // e.g. "382 75 76 78 77 76" -> numTokens[0]=382, numTokens[1..N]=scores
+    const total = numTokens[0];
+    const scores = numTokens.slice(1);
 
-    // From right: numRounds scores
-    const scores: number[] = [];
-    for (let i = 0; i < numRounds; i++) {
-      scores.unshift(parseFloat(tokens[tokens.length - 1 - i]));
-    }
-
-    const total = parseFloat(tokens[tokens.length - numRounds - 1]);
-    if (isNaN(total)) continue;
-
-    // Middle blob: everything between position and scores/total
-    const blob = tokens.slice(1, tokens.length - fixedRight).join(" ").trim();
     if (!blob) continue;
 
-    // Try to find known team name in blob
     let name = blob;
     let team = "";
 
+    // 1st pass: strict match including boundaries
     for (const t of sortedTeams) {
       const idx = blob.indexOf(t);
       if (idx !== -1) {
@@ -148,11 +158,11 @@ function parseSpeakerTab(text: string, numRounds: number, knownTeams: string[], 
       }
     }
 
-    // Fallback: no team matched — use last few words as team
+    // Fallback: no team matched 
     if (!team) {
-      const parts = blob.split(" ");
-      name = parts.slice(0, 2).join(" ");
-      team = parts.slice(2).join(" ");
+      const p = blob.split(" ");
+      name = p.slice(0, Math.max(1, p.length - 2)).join(" ");
+      team = p.slice(Math.max(1, p.length - 2)).join(" ");
       warnings.push(`Takım eşleştirilemedi: "${blob}" — manuel düzeltme gerekiyor`);
     }
 
