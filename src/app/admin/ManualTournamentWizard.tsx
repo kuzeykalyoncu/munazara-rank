@@ -75,17 +75,18 @@ function PdfDropZone({ label, hint, onExtracted, extracted }: {
               closestRow = row; 
             }
           }
-          // Only assign if it visually belongs to the row (within 30px vertically)
-          if (minDiff < 30) {
+          // Only assign if it visually belongs to the row (within 14px vertically to avoid headers)
+          if (minDiff < 14) {
             closestRow.items.push(item);
           }
         }
         
-        // Sort items left-to-right within each row. If directly stacked, order top-to-bottom.
+        // Sort items left-to-right within each row. If vertically stacked in the same column, order top-to-bottom.
         for (const row of rows) {
            row.items.sort((a: any, b: any) => {
              const diffX = a.x - b.x;
-             if (Math.abs(diffX) < 10) {
+             // If they belong to the same column (X diff is small like in centered text), read top-to-bottom
+             if (Math.abs(diffX) < 25) {
                  return b.y - a.y; // top first
              }
              return diffX;

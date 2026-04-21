@@ -150,11 +150,30 @@ function parseSpeakerTab(text: string, numRounds: number, knownTeams: string[], 
 
     // 1st pass: strict match including boundaries
     for (const t of sortedTeams) {
-      const idx = blob.indexOf(t);
-      if (idx !== -1) {
-        name = blob.slice(0, idx).trim();
+      if (blob.includes(t)) {
+        name = blob.replace(t, "").trim();
         team = t;
         break;
+      }
+    }
+
+    // 2nd pass: fuzzy match (word inclusion) for jumbled columns
+    if (!team) {
+      const blobWords = blob.split(/\s+/).map(w => w.toLowerCase());
+      for (const t of sortedTeams) {
+        const teamWords = t.split(/\s+/).map(w => w.toLowerCase());
+        const containsAll = teamWords.every(tw => blobWords.includes(tw));
+        if (containsAll) {
+          team = t;
+          // to build name, carefully remove the first instance of each team word
+          let tempBlobParts = blob.split(/\s+/);
+          for (const tw of t.split(/\s+/)) {
+             const idx = tempBlobParts.findIndex(p => p.toLowerCase() === tw.toLowerCase());
+             if (idx !== -1) tempBlobParts.splice(idx, 1);
+          }
+          name = tempBlobParts.join(" ").trim();
+          break;
+        }
       }
     }
 
