@@ -490,7 +490,15 @@ export async function POST(req: NextRequest) {
     const finalSet = new Set(results.finalists.map(n => n.toLowerCase()));
     const championSet = new Set(results.champions.map(n => n.toLowerCase()));
     // Auto-detect Best Speakers based on Rank 1 from the tab
-    const detectedBestSpeakers = scraped.filter(s => s.rank === 1).map(s => s.name);
+    let detectedBestSpeakers = scraped.filter(s => s.rank === 1).map(s => s.name);
+    
+    // Fallback for older tournaments in the database that don't have the 'rank' property
+    if (detectedBestSpeakers.length === 0) {
+      const maxSpeakerPoints = Math.max(0, ...scraped.map(s => s.totalPoints || 0));
+      if (maxSpeakerPoints > 0) {
+        detectedBestSpeakers = scraped.filter(s => s.totalPoints === maxSpeakerPoints).map(s => s.name);
+      }
+    }
       
     const combinedBestSpeakers = [...new Set([...(results.bestSpeakers || []), ...detectedBestSpeakers])];
     const bestSpeakerSet = new Set(combinedBestSpeakers.map(n => n.toLowerCase()));
