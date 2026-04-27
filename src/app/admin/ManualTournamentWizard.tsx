@@ -94,7 +94,7 @@ function ExcelDropZone({ onExtracted }: { onExtracted: (data: any) => void }) {
         ) : (
           <>
             <span className="text-4xl opacity-40">📊</span>
-            <p className="text-gray-400 text-sm">Excel'i buraya sürükle veya seç</p>
+            <p className="text-gray-400 text-sm">Excel&apos;i buraya sürükle veya seç</p>
           </>
         )}
       </label>
