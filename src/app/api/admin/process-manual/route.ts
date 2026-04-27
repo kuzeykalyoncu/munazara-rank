@@ -147,6 +147,22 @@ export async function POST(req: NextRequest) {
     const roundLogInserts: any[] = [];
     const h2hRecords: any[] = [];
 
+    // Calculate tournament average SP
+    let totalSp = 0;
+    let countSp = 0;
+    for (const team of teams) {
+      for (const spName of team.speakers) {
+        const scores = spScoresMap[spName] || [];
+        for (const score of scores) {
+          if (score > 0) {
+            totalSp += score;
+            countSp++;
+          }
+        }
+      }
+    }
+    const tournamentAvgSp = countSp > 0 ? totalSp / countSp : 72;
+
     // 3. Process prelim rounds
     for (let r = 0; r < numRounds; r++) {
       const avgElo = avgTournamentElo();
@@ -210,7 +226,16 @@ export async function POST(req: NextRequest) {
 
           const k = getKFactor(sp.matchCount);
           sp.matchCount += 1;
-          const change = k * rawDelta * mult * 2;
+          const change_base = k * rawDelta * mult * 2;
+          
+          let spFactor = 1.0;
+          if (played && spScore > 0) {
+             const deltaSp = spScore - tournamentAvgSp;
+             spFactor = Math.max(0.6, Math.min(1.4, 1 + (deltaSp * 0.1)));
+          }
+
+          const change = change_base > 0 ? change_base * spFactor : (change_base < 0 ? change_base / spFactor : 0);
+
           const eloBefore = sp.elo;
           sp.elo += change;
           sp.eloChange += change;
@@ -321,7 +346,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 6. Dry run → return preview
+    // 6. Best Speaker bonus
+    const BEST_SPEAKER_BONUS = 15;
+    if (bestSpeaker) {
+      const bestSpeakerNorm = normalizeName(bestSpeaker);
+      const sp = Object.values(speakerMap).find(s => normalizeName(s.name) === bestSpeakerNorm);
+      if (sp) {
+        sp.elo += BEST_SPEAKER_BONUS;
+        sp.eloChange += BEST_SPEAKER_BONUS;
+        sp.brBonusTotal += BEST_SPEAKER_BONUS;
+      }
+    }
+
+    // 7. Dry run → return preview
     if (dryRun) {
       const previewSpeakers = Object.values(speakerMap).map(sp => ({
         name: sp.name,

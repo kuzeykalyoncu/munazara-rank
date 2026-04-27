@@ -164,6 +164,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Calculate tournament average SP
+    let totalSp = 0;
+    let countSp = 0;
+    for (const sp of scraped) {
+      for (const score of sp.scores) {
+        if (score > 0) {
+          totalSp += score;
+          countSp++;
+        }
+      }
+    }
+    const tournamentAvgSp = countSp > 0 ? totalSp / countSp : 72;
+
     // 4. Room loop — Elo calculation + round log + H2H
     const h2hRecords: any[] = [];
     const roundLogInserts: any[] = [];
@@ -278,10 +291,7 @@ export async function POST(req: NextRequest) {
           const s = t.speakers[0];
           s.matchCount += 1;
           const personalK = getKFactor(s.matchCount - 1);
-          const change = personalK * rawDelta * 2;
           const eloBefore = s.elo;
-          s.elo += change;
-          s.eloChange += change;
 
           let ownSp: number | null = null;
           if (!isOutroundFlag) {
@@ -292,6 +302,21 @@ export async function POST(req: NextRequest) {
             s.prelimRoundCount += 1;
             speakerPrelimIdx[s.name] = idx + 1;
           }
+
+          let spFactor = 1.0;
+          if (!isOutroundFlag && ownSp && ownSp > 0) {
+            const delta = ownSp - tournamentAvgSp;
+            spFactor = Math.max(0.6, Math.min(1.4, 1 + (delta * 0.1)));
+          }
+
+          let change = personalK * rawDelta * 2;
+          if (change > 0) change = change * spFactor;
+          else if (change < 0) change = change / spFactor;
+
+          s.elo += change;
+          s.eloChange += change;
+
+          // roundLogInserts below uses ownSp
 
           roundLogInserts.push({
             speaker_id: s.id, tournament_id: tournamentId,
@@ -380,10 +405,25 @@ export async function POST(req: NextRequest) {
             distributionMode = isOutroundFlag ? "outround-berabere" : "berabere";
           }
 
-          const share1 = k1 * rawDelta * mult1 * 2;
-          const share2 = k2 * rawDelta * mult2 * 2;
+          const share1_base = k1 * rawDelta * mult1 * 2;
+          const share2_base = k2 * rawDelta * mult2 * 2;
           const elo_before_s1 = s1.elo;
           const elo_before_s2 = s2.elo;
+
+          let spFactor1 = 1.0;
+          if (!isOutroundFlag && sp1 > 0) {
+            const delta1 = sp1 - tournamentAvgSp;
+            spFactor1 = Math.max(0.6, Math.min(1.4, 1 + (delta1 * 0.1)));
+          }
+
+          let spFactor2 = 1.0;
+          if (!isOutroundFlag && sp2 > 0) {
+            const delta2 = sp2 - tournamentAvgSp;
+            spFactor2 = Math.max(0.6, Math.min(1.4, 1 + (delta2 * 0.1)));
+          }
+
+          const share1 = share1_base > 0 ? share1_base * spFactor1 : (share1_base < 0 ? share1_base / spFactor1 : 0);
+          const share2 = share2_base > 0 ? share2_base * spFactor2 : (share2_base < 0 ? share2_base / spFactor2 : 0);
 
           s1.elo += share1; s2.elo += share2;
           s1.eloChange += share1; s2.eloChange += share2;
@@ -453,6 +493,8 @@ export async function POST(req: NextRequest) {
     const overrideBreaks = body.overrideBreaks || {};
     const BREAK_BONUS = 5;
 
+    const BEST_SPEAKER_BONUS = 15;
+
     for (const spName of Object.keys(speakerMap)) {
       const speaker = speakerMap[spName];
       const teamName = speakerTeamMap[spName] || "";
@@ -465,6 +507,13 @@ export async function POST(req: NextRequest) {
         speaker.eloChange += BREAK_BONUS;
         speaker.careerBreakCount += 1;       // Kümülatif: DB değerine +1 eklenir
         speaker.brBonusTotal += BREAK_BONUS;
+      }
+
+      const isBestSpeaker = [...bestSpeakerSet].some(b => speaker.name.toLowerCase().includes(b) || b.includes(speaker.name.toLowerCase().split(" ")[0]));
+      if (isBestSpeaker) {
+        speaker.elo += BEST_SPEAKER_BONUS;
+        speaker.eloChange += BEST_SPEAKER_BONUS;
+        speaker.brBonusTotal += BEST_SPEAKER_BONUS; // Track in bonus total as well
       }
     }
 
