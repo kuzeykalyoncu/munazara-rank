@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import type { ParsedSpeaker, ParsedTeam } from "../parse-tab/route";
+import type { ParsedSpeaker, ParsedTeam } from "../parse-excel/route";
 
 interface ProcessManualInput {
   tournamentId?: string;

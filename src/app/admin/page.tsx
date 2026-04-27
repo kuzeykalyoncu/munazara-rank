@@ -1382,6 +1382,13 @@ export default function AdminPage() {
                                     <span className="text-right font-mono font-bold text-green-400">+5</span>
                                   </div>
                                 )}
+                                {/* Best Speaker bonus row */}
+                                {sp.isBestSpeaker && (
+                                  <div className="grid grid-cols-5 gap-2 items-center px-2 py-1.5 rounded-lg bg-yellow-500/5 border border-yellow-500/10">
+                                    <span className="text-yellow-300 font-medium col-span-4">🌟 En İyi Konuşmacı Bonusu</span>
+                                    <span className="text-right font-mono font-bold text-yellow-400">+15</span>
+                                  </div>
+                                )}
                               </div>
                             </td>
                           </tr>

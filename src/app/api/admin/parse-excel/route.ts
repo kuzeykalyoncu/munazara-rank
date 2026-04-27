@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import type { ParsedSpeaker, ParsedTeam } from "../parse-tab/route";
+export interface ParsedSpeaker {
+  position: number;
+  name: string;
+  team: string;
+  total: number;
+  scores: number[];
+}
 
+export interface ParsedTeam {
+  position: number;
+  teamName: string;
+  totalRank: number;
+  totalSpeaker: number;
+  pullups: number;
+  speakerScores: number[];
+  rankScores: number[];
+  speakers: string[];
+}
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();

@@ -1,9 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import { supabase } from "@/lib/supabase";
-import type { ParsedSpeaker, ParsedTeam } from "@/app/api/admin/parse-tab/route";
-
+import type { ParsedSpeaker, ParsedTeam } from "@/app/api/admin/parse-excel/route";
 interface Props {
   loading: boolean;
   setLoading: (v: boolean) => void;

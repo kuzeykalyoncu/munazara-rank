@@ -4,7 +4,7 @@ import type { ScrapeResult } from "../scrape/route";
 
 interface ProcessInput {
   tournamentId: string;
-  speakers: { name: string; totalPoints: number; scores: number[] }[];
+  speakers: { name: string; totalPoints: number; scores: number[]; rank?: number }[];
   teams: { name: string; speakers: string[] }[];
   results: ScrapeResult["results"] & {
     rooms: { name?: string; placements: string[]; isOutround?: boolean }[];
@@ -489,11 +489,8 @@ export async function POST(req: NextRequest) {
     const breakSet = new Set(results.breaks.map(n => n.toLowerCase()));
     const finalSet = new Set(results.finalists.map(n => n.toLowerCase()));
     const championSet = new Set(results.champions.map(n => n.toLowerCase()));
-    // Auto-detect Best Speakers based on highest totalPoints
-    const maxSpeakerPoints = Math.max(0, ...speakers.map(s => s.totalPoints || 0));
-    const detectedBestSpeakers = maxSpeakerPoints > 0 
-      ? speakers.filter(s => s.totalPoints === maxSpeakerPoints).map(s => s.name)
-      : [];
+    // Auto-detect Best Speakers based on Rank 1 from the tab
+    const detectedBestSpeakers = scraped.filter(s => s.rank === 1).map(s => s.name);
       
     const combinedBestSpeakers = [...new Set([...(results.bestSpeakers || []), ...detectedBestSpeakers])];
     const bestSpeakerSet = new Set(combinedBestSpeakers.map(n => n.toLowerCase()));
@@ -537,12 +534,15 @@ export async function POST(req: NextRequest) {
           ? spData.prelimSpeakTotal / spData.prelimRoundCount : 0;
         const spRounds = roundLogInserts.filter(r => r.speaker_id === spData.id);
 
+        const isBestSpeaker = [...bestSpeakerSet].some(b => sp.name.toLowerCase().includes(b) || b.includes(sp.name.toLowerCase().split(" ")[0]));
+
         return {
           name: sp.name,
           speakerId: spData.id,
           eloChange: Math.round(spData.eloChange * 10) / 10,
           eloAfter: Math.round(spData.elo),
           didBreak,
+          isBestSpeaker,
           prelimSpeakAvg: Math.round(prelimSpeakAvg * 10) / 10,
           rounds: spRounds.map(r => ({
             roundName: r.round_name,

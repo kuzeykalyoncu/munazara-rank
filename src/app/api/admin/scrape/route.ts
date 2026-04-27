@@ -3,7 +3,7 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 
 export interface ScrapeResult {
-  speakers: { name: string; totalPoints: number; scores: number[] }[];
+  speakers: { name: string; totalPoints: number; scores: number[]; rank?: number }[];
   teams: { name: string; speakers: string[] }[];
   results: {
     rooms: { name: string; placements: string[]; isOutround: boolean }[];
@@ -113,14 +113,15 @@ function extractVueTablesData(html: string): any[] | null {
 
 function parseSpeakers(
   html: string
-): { name: string; totalPoints: number; scores: number[] }[] {
+): { name: string; totalPoints: number; scores: number[]; rank?: number }[] {
   const $ = cheerio.load(html);
-  const speakers: { name: string; totalPoints: number; scores: number[] }[] = [];
+  const speakers: { name: string; totalPoints: number; scores: number[]; rank?: number }[] = [];
 
   // 1. Try Vue tablesData JSON first (newer Tabbycat)
   const vueData = extractVueTablesData(html);
   if (vueData && vueData.length > 0 && vueData[0].data && vueData[0].head) {
     const head = vueData[0].head;
+    const rankIdx = head.findIndex((h: any) => ["rank", "rk", "sıra"].includes((h.key || "").toLowerCase()) || ["Rank", "Sıra"].includes(h.tooltip || h.title));
     const nameIdx = head.findIndex((h: any) => 
       ["name", "speaker", "participant", "fullname"].includes((h.key || "").toLowerCase()) || 
       ["Name", "Speaker", "Participant"].includes(h.tooltip || h.title)
@@ -149,6 +150,13 @@ function parseSpeakers(
         
         // Clean name: remove HTML tags, handle common Tabbycat tie markers like "11="
         name = normalizeName(name.replace(/<[^>]*>/g, "").replace(/\d+=/, ""));
+      }
+
+      let rank = 0;
+      if (rankIdx !== -1) {
+        const rc = row[rankIdx];
+        const rStr = (rc?.text || rc?.sort || "").toString().replace(/<[^>]*>/g, "").replace("=", "").trim();
+        rank = parseInt(rStr, 10) || 0;
       }
 
       if (!name || /^\d+$/.test(name) || name.length < 2) continue;
@@ -201,7 +209,7 @@ function parseSpeakers(
         : total > 0 ? total / (scores.length || 1) : 0;
       
       if (pointAvg > 0) {
-        speakers.push({ name, totalPoints: pointAvg, scores });
+        speakers.push({ name, totalPoints: pointAvg, scores, rank });
       }
     }
     
@@ -238,8 +246,11 @@ function parseSpeakers(
       ? scores.reduce((a, b) => a + b, 0) / scores.length
       : 0;
 
+    const rankStr = $(cells[0]).text().replace(/<[^>]*>/g, "").replace("=", "").trim();
+    const rank = parseInt(rankStr, 10) || 0;
+
     if (name && totalPoints > 0) {
-      speakers.push({ name, totalPoints, scores });
+      speakers.push({ name, totalPoints, scores, rank });
     }
   });
 
