@@ -14,87 +14,50 @@ interface Props {
 type Step = "name" | "upload" | "edit" | "finals" | "preview";
 
 // ── Excel Drag-Drop Zone ────────────────────────────────────────────────────────
-function ExcelDropZone({ onExtracted }: { onExtracted: (data: any) => void }) {
+function ExcelDropZone({ label, hint, onFileSelect, file }: { label: string; hint: string; onFileSelect: (f: File) => void; file: File | null }) {
   const [dragging, setDragging] = useState(false);
-  const [extracting, setExtracting] = useState(false);
-  const [fileName, setFileName] = useState("");
-
-  async function handleFile(file: File) {
-    if (!file.name.toLowerCase().endsWith(".xlsx")) {
-      alert("Lütfen sadece MunazaraRank Şablonu (.xlsx) yükleyin.");
-      return;
-    }
-    setExtracting(true);
-    setFileName(file.name);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      
-      const res = await fetch("/api/admin/parse-excel", {
-        method: "POST",
-        body: formData
-      });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Excel okunamadı.");
-      
-      onExtracted(data);
-    } catch (e: any) {
-      alert("Hata: " + e.message);
-      setFileName("");
-    } finally {
-      setExtracting(false);
-    }
-  }
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  }, []);
+    const f = e.dataTransfer.files[0];
+    if (f) {
+      if (!f.name.toLowerCase().endsWith(".xlsx") && !f.name.toLowerCase().endsWith(".xls") && !f.name.toLowerCase().endsWith(".csv")) {
+        alert("Lütfen bir Excel/CSV dosyası yükleyin.");
+        return;
+      }
+      onFileSelect(f);
+    }
+  }, [onFileSelect]);
 
   return (
     <div>
-      <div className="flex justify-between items-end mb-3">
-        <div>
-          <p className="text-white font-medium">Excel Şablonunu Yükle</p>
-          <p className="text-gray-500 text-xs mt-1">Doldurduğunuz şablon dosyasını yükleyin.</p>
-        </div>
-        <a href="/api/admin/template" download="MunazaraRank_Sablon.xlsx" 
-           className="bg-violet-600 hover:bg-violet-500 text-white text-xs px-4 py-2 rounded-lg font-medium transition flex items-center gap-2">
-           <span>⬇️</span> Şablonu İndir
-        </a>
-      </div>
+      <p className="text-white font-medium mb-2">{label}</p>
+      <p className="text-gray-500 text-xs mb-3">{hint}</p>
       <label
         className={`flex flex-col items-center justify-center gap-3 w-full h-36 rounded-2xl border-2 border-dashed cursor-pointer transition-all ${
           dragging ? "border-violet-400 bg-violet-500/10 scale-[1.01]" :
-          fileName && !extracting ? "border-green-500/40 bg-green-500/5" :
+          file ? "border-green-500/40 bg-green-500/5" :
           "border-white/15 bg-white/3 hover:border-violet-500/40 hover:bg-violet-500/5"
         }`}
         onDragOver={e => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
       >
-        <input type="file" accept=".xlsx" className="hidden" onChange={e => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
+        <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={e => {
+          const f = e.target.files?.[0];
+          if (f) onFileSelect(f);
         }} />
-        {extracting ? (
-          <>
-            <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-            <p className="text-violet-400 text-sm">Excel okunuyor…</p>
-          </>
-        ) : fileName ? (
+        {file ? (
           <>
             <span className="text-3xl">✅</span>
-            <p className="text-green-400 text-sm font-medium">{fileName}</p>
-            <p className="text-gray-500 text-xs">Başka bir dosya sürükleyerek değiştir</p>
+            <p className="text-green-400 text-sm font-medium">{file.name}</p>
+            <p className="text-gray-500 text-xs">Değiştirmek için tıkla</p>
           </>
         ) : (
           <>
             <span className="text-4xl opacity-40">📊</span>
-            <p className="text-gray-400 text-sm">Excel&apos;i buraya sürükle veya seç</p>
+            <p className="text-gray-400 text-sm">Sürükle veya Seç</p>
           </>
         )}
       </label>
@@ -107,6 +70,8 @@ export default function ManualTournamentWizard({ loading, setLoading, setStatus,
   const [step, setStep] = useState<Step>("name");
   const [name, setName] = useState("");
   const [numRounds, setNumRounds] = useState(5);
+  const [speakerFile, setSpeakerFile] = useState<File | null>(null);
+  const [teamFile, setTeamFile] = useState<File | null>(null);
   const [parsedSpeakers, setParsedSpeakers] = useState<ParsedSpeaker[]>([]);
   const [parsedTeams, setParsedTeams] = useState<ParsedTeam[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -126,11 +91,30 @@ export default function ManualTournamentWizard({ loading, setLoading, setStatus,
     setStep("upload");
   }
 
-  function handleExcelParsed(data: any) {
-    setParsedSpeakers(data.speakers || []);
-    setParsedTeams(data.teams || []);
-    setWarnings(data.warnings || []);
-    setStep("edit");
+  async function handleExcelParsed() {
+    if (!speakerFile || !teamFile) return;
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("speakerFile", speakerFile);
+      formData.append("teamFile", teamFile);
+      
+      const res = await fetch("/api/admin/parse-excel", {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      setParsedSpeakers(data.speakers || []);
+      setParsedTeams(data.teams || []);
+      setWarnings(data.warnings || []);
+      setStep("edit");
+    } catch (e: any) {
+      setStatus("❌ Parse hatası: " + e.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handlePreview() {
@@ -236,14 +220,39 @@ export default function ManualTournamentWizard({ loading, setLoading, setStatus,
         {/* ── Adım 2: Excel Yükle ── */}
         {step === "upload" && (
           <div className="space-y-6">
-            <p className="text-gray-400 text-sm">
-              Önce şablonu indirin, verilerinizi kopyalayın ve ardından yükleyin.
-            </p>
+            <div className="flex justify-between items-end mb-3">
+              <div>
+                <p className="text-gray-400 text-sm">
+                  Turnuvanın <strong>Speaker Tab</strong> ve <strong>Team Tab</strong> Excel dosyalarını ayrı ayrı yükleyin.
+                </p>
+              </div>
+              <a href="/api/admin/template" download="MunazaraRank_Sablon.xlsx" 
+                 className="bg-violet-600 hover:bg-violet-500 text-white text-xs px-4 py-2 rounded-lg font-medium transition flex items-center gap-2">
+                 <span>⬇️</span> Şablonu İndir
+              </a>
+            </div>
             
-            <ExcelDropZone onExtracted={handleExcelParsed} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <ExcelDropZone 
+                label="🎙️ Speaker Tab Excel" 
+                hint="Konuşmacı Puanları" 
+                file={speakerFile} 
+                onFileSelect={setSpeakerFile} 
+              />
+              <ExcelDropZone 
+                label="🏆 Team Tab Excel" 
+                hint="Takım Sıralaması" 
+                file={teamFile} 
+                onFileSelect={setTeamFile} 
+              />
+            </div>
 
             <div className="flex gap-3">
               <button onClick={() => setStep("name")} className="px-4 py-2 rounded-xl bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition text-sm">← Geri</button>
+              <button onClick={handleExcelParsed} disabled={!speakerFile || !teamFile || loading}
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-semibold disabled:opacity-50 hover:from-violet-500 hover:to-indigo-500 transition-all shadow-lg shadow-violet-500/20">
+                {loading ? "Excel Okunuyor…" : "🔍 Analiz Et →"}
+              </button>
             </div>
           </div>
         )}

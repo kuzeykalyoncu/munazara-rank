@@ -5,22 +5,28 @@ import type { ParsedSpeaker, ParsedTeam } from "../parse-tab/route";
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
-    const file = formData.get("file") as File;
+    const speakerFile = formData.get("speakerFile") as File;
+    const teamFile = formData.get("teamFile") as File;
 
-    if (!file) {
-      return NextResponse.json({ error: "Dosya bulunamadı." }, { status: 400 });
+    if (!speakerFile || !teamFile) {
+      return NextResponse.json({ error: "Lütfen hem Speaker Tab hem de Team Tab dosyalarını yükleyin." }, { status: 400 });
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(arrayBuffer);
+    const speakerBuffer = await speakerFile.arrayBuffer();
+    const speakerWorkbook = new ExcelJS.Workbook();
+    await speakerWorkbook.xlsx.load(speakerBuffer);
 
-    const teamSheet = workbook.worksheets.find(s => s.name.toLowerCase().includes("takım"));
-    const speakerSheet = workbook.worksheets.find(s => s.name.toLowerCase().includes("konuşmacı") || s.name.toLowerCase().includes("speaker"));
+    const teamBuffer = await teamFile.arrayBuffer();
+    const teamWorkbook = new ExcelJS.Workbook();
+    await teamWorkbook.xlsx.load(teamBuffer);
+
+    // İlk sayfayı (sheet) al
+    const teamSheet = teamWorkbook.worksheets[0];
+    const speakerSheet = speakerWorkbook.worksheets[0];
 
     if (!teamSheet || !speakerSheet) {
       return NextResponse.json({ 
-        error: "Excel dosyasında 'Takımlar' ve 'Konuşmacılar' isimli iki ayrı sayfa (sheet) bulunamadı. Lütfen şablonu bozmadan kullanın." 
+        error: "Excel dosyalarının içinde okunabilir sayfa bulunamadı." 
       }, { status: 400 });
     }
 
