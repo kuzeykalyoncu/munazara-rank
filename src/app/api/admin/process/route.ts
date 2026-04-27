@@ -489,7 +489,14 @@ export async function POST(req: NextRequest) {
     const breakSet = new Set(results.breaks.map(n => n.toLowerCase()));
     const finalSet = new Set(results.finalists.map(n => n.toLowerCase()));
     const championSet = new Set(results.champions.map(n => n.toLowerCase()));
-    const bestSpeakerSet = new Set(results.bestSpeakers.map(n => n.toLowerCase()));
+    // Auto-detect Best Speakers based on highest totalPoints
+    const maxSpeakerPoints = Math.max(0, ...speakers.map(s => s.totalPoints || 0));
+    const detectedBestSpeakers = maxSpeakerPoints > 0 
+      ? speakers.filter(s => s.totalPoints === maxSpeakerPoints).map(s => s.name)
+      : [];
+      
+    const combinedBestSpeakers = [...new Set([...(results.bestSpeakers || []), ...detectedBestSpeakers])];
+    const bestSpeakerSet = new Set(combinedBestSpeakers.map(n => n.toLowerCase()));
     const overrideBreaks = body.overrideBreaks || {};
     const BREAK_BONUS = 5;
 
