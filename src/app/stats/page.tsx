@@ -41,15 +41,18 @@ function EloBadge({ elo }: { elo: number }) {
 
 export default function StatsPage() {
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [peakElos, setPeakElos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/leaderboard")
-      .then((r) => r.json())
-      .then((d) => {
-        setSpeakers(d.speakers || []);
-        setLoading(false);
-      });
+    Promise.all([
+      fetch("/api/leaderboard").then((r) => r.json()),
+      fetch("/api/stats/peak-elo").then((r) => r.json()).catch(() => ({ peakElos: [] }))
+    ]).then(([leaderboardData, peakData]) => {
+      setSpeakers(leaderboardData.speakers || []);
+      setPeakElos(peakData.peakElos || []);
+      setLoading(false);
+    });
   }, []);
 
   // 1. ELO Distribution (Bell Curve)
@@ -256,6 +259,48 @@ export default function StatsPage() {
               </Link>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="glass rounded-2xl p-6 mt-8">
+        <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+          <span className="text-purple-400">🏆</span> Tüm Zamanların En Yüksek ELO&apos;su (Peak ELO)
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {peakElos.map((sp, i) => (
+            <Link
+              key={sp.speakerId}
+              href={`/speakers/${sp.speakerId}`}
+              className="flex items-center justify-between bg-white/5 hover:bg-white/10 transition rounded-xl p-3 group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-8 text-center text-gray-500 font-mono text-sm">
+                  {i + 1}.
+                </div>
+                <div>
+                  <div className="text-white font-medium group-hover:text-purple-400 transition">
+                    {sp.name}
+                  </div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {sp.tournamentName}
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-purple-400 font-bold text-lg">
+                  {sp.peakElo}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5 font-mono">
+                  Zirve Puan
+                </div>
+              </div>
+            </Link>
+          ))}
+          {peakElos.length === 0 && (
+            <div className="col-span-1 md:col-span-2 text-center py-4 text-sm text-gray-500">
+              Henüz Peak ELO verisi oluşmamış (Turnuvaların &apos;Toplu Yenileme&apos; yapılması gerekebilir).
+            </div>
+          )}
         </div>
       </div>
     </div>
