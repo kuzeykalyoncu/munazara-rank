@@ -19,9 +19,9 @@ function expectedScore(ratingA: number, ratingB: number): number {
 }
 
 function getKFactor(matchCount: number): number {
-  if (matchCount <= 20) return 60;
-  if (matchCount <= 100) return 50;
-  return 40;
+  if (matchCount <= 20) return 40;
+  if (matchCount <= 100) return 35;
+  return 30;
 }
 
 function toTitleCase(name: string): string {

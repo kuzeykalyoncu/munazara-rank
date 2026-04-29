@@ -42,9 +42,9 @@ function expectedScore(ratingA: number, ratingB: number): number {
 }
 
 function getKFactor(matchCount: number): number {
-  if (matchCount <= 20) return 60;   // Yerleştirme
-  if (matchCount <= 100) return 50;  // Gelişim
-  return 40;                          // Veteran
+  if (matchCount <= 20) return 40;   // Yerleştirme
+  if (matchCount <= 100) return 35;  // Gelişim
+  return 30;                          // Veteran
 }
 
 export async function POST(req: NextRequest) {
