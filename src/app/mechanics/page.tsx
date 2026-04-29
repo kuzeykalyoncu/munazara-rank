@@ -52,9 +52,9 @@ export default function MechanicsPage() {
           {`match_count = girilen salon sayısı (her tur +1)
 
 K-Faktörü:
-  match_count ≤ 20  →  K = 60   (Yerleştirme dönemi)
-  match_count ≤ 100 →  K = 50   (Gelişim dönemi)
-  match_count  > 100 →  K = 40   (Veteran)
+  match_count ≤ 20  →  K = 40   (Yerleştirme dönemi)
+  match_count ≤ 100 →  K = 35   (Gelişim dönemi)
+  match_count  > 100 →  K = 30   (Veteran)
 
 Unranked Barajı:
   total_tournaments < 4 ise oyuncu sıralamada “Unranked” görünür.
@@ -229,24 +229,24 @@ EA = 1 / (1 + 10^((rakipTeamElo - TeamElo) / 400))`}
       </Section>
 
       {/* Step 5 */}
-      <Section emoji="5️⃣" title="Kümülatif Break Bonusu">
+      <Section emoji="5️⃣" title="Kümülatif Başarı Bonusları">
         <p className="text-gray-300 leading-relaxed mb-4">
-          Break (eleme turu oynama hakkı kazanma), kariyerde kalıcı bir bonus oluşturur.
-          Her break <strong className="text-white">+5 Elo</strong> değerindedir ve bir defaya mahsus değil,
-          kariyerdeki tüm break&apos;ler kümülatif olarak eklenir.
+          Turnuvalarda elde edilen başarılar, kariyerde kalıcı bir bonus oluşturur.
+          Her break <strong className="text-white">+5 Elo</strong>, her En İyi Konuşmacı (Best Speaker) ödülü ise <strong className="text-white">+15 Elo</strong> değerindedir.
+          Bu bonuslar bir defaya mahsus değil, kariyerdeki tüm başarılar kümülatif olarak eklenir.
         </p>
         <CodeBlock>
-          {`BreakBonus = career_break_count × 5
+          {`BonusTotal = (career_break_count × 5) + (best_speaker_count × 15)
 
-// Örnek: 3 farklı turnuvada break eden bir oyuncu
-BreakBonus = 3 × 5 = +15 Elo
+// Örnek: 3 kez break eden ve 1 kez en iyi konuşmacı olan oyuncu
+BonusTotal = (3 × 5) + (1 × 15) = +30 Elo
 
 // Hesaplama sonu:
-EloSonu = EloBaşlangıcı + toplam_prelim_delta + BreakBonus`}
+EloSonu = EloBaşlangıcı + toplam_prelim_delta + BonusTotal`}
         </CodeBlock>
         <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-green-300 text-sm mt-3">
-          ✅ Break bonusu idempotent&apos;tir: yani veriler sıfırlanıp yeniden hesaplansa bile
-          aynı sonuç üretilir çünkü<code className="bg-black/30 px-1 rounded mx-0.5">career_break_count</code>
+          ✅ Bonuslar idempotent&apos;tir: yani veriler sıfırlanıp yeniden hesaplansa bile
+          aynı sonuç üretilir çünkü <code className="bg-black/30 px-1 rounded mx-0.5">başarılar</code>
           her turnuva için ayrı ayrı takip edilir.
         </div>
       </Section>
@@ -272,16 +272,16 @@ EloSonu = EloBaşlangıcı + toplam_prelim_delta + BreakBonus`}
               </tr>
             </thead>
             <tbody>
-              <ExampleRow tur="Tur 1" k={64} teamElo={1000} rakipElo={1050} ea={0.43} mod="Gelişim" sa={0.60} delta={+11} />
-              <ExampleRow tur="Tur 2" k={48} teamElo={1011} rakipElo={990} ea={0.53} mod="Performans" sa={0.85} delta={+15} />
-              <ExampleRow tur="Tur 3" k={48} teamElo={1026} rakipElo={1100} ea={0.37} mod="Gelişim" sa={0.40} delta={+1} />
-              <ExampleRow tur="Tur 4" k={48} teamElo={1027} rakipElo={1020} ea={0.50} mod="Performans" sa={0.20} delta={-14} />
-              <ExampleRow tur="🏆 Çeyrek Final" k={48} teamElo={1013} rakipElo={1080} ea={0.40} mod="Outround-Gelişim" sa={0.63} delta={+11} />
+              <ExampleRow tur="Tur 1" k={40} teamElo={1000} rakipElo={1050} ea={0.43} mod="Gelişim" sa={0.60} delta={+7} />
+              <ExampleRow tur="Tur 2" k={40} teamElo={1007} rakipElo={990} ea={0.52} mod="Performans" sa={0.85} delta={+13} />
+              <ExampleRow tur="Tur 3" k={40} teamElo={1020} rakipElo={1100} ea={0.39} mod="Gelişim" sa={0.40} delta={0} />
+              <ExampleRow tur="Tur 4" k={40} teamElo={1020} rakipElo={1020} ea={0.50} mod="Performans" sa={0.20} delta={-12} />
+              <ExampleRow tur="🏆 Çeyrek Final" k={40} teamElo={1008} rakipElo={1080} ea={0.40} mod="Outround-Gelişim" sa={0.63} delta={+9} />
               <tr className="bg-white/3 border-t border-white/20">
                 <td colSpan={7} className="px-3 py-2.5 text-right font-semibold text-gray-300">
                   Toplam (Prelim + Outround)
                 </td>
-                <td className="px-3 py-2.5 text-right font-bold text-green-400">+24</td>
+                <td className="px-3 py-2.5 text-right font-bold text-green-400">+17</td>
               </tr>
               <tr className="bg-green-500/5 border-t border-green-500/20">
                 <td colSpan={7} className="px-3 py-2.5 text-right text-gray-400 text-xs italic">
@@ -291,9 +291,9 @@ EloSonu = EloBaşlangıcı + toplam_prelim_delta + BreakBonus`}
               </tr>
               <tr className="bg-indigo-500/10 border-t border-indigo-500/40">
                 <td colSpan={7} className="px-3 py-2.5 text-right font-bold text-white">
-                  Yeni Elo (1000 + 24 + 5)
+                  Yeni Elo (1000 + 17 + 5)
                 </td>
-                <td className="px-3 py-2.5 text-right font-bold text-indigo-400 text-sm">1029</td>
+                <td className="px-3 py-2.5 text-right font-bold text-indigo-400 text-sm">1022</td>
               </tr>
             </tbody>
           </table>
