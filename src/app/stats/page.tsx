@@ -46,8 +46,8 @@ export default function StatsPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/leaderboard").then((r) => r.json()),
-      fetch("/api/stats/peak-elo").then((r) => r.json()).catch(() => ({ peakElos: [] }))
+      fetch("/api/leaderboard", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/stats/peak-elo", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ peakElos: [] }))
     ]).then(([leaderboardData, peakData]) => {
       setSpeakers(leaderboardData.speakers || []);
       setPeakElos(peakData.peakElos || []);
