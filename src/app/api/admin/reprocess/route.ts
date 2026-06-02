@@ -48,9 +48,13 @@ export async function POST(req: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
+    const adminToken = req.cookies.get("munazara_admin")?.value;
     const processRes = await fetch(`${baseUrl}/api/admin/process`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        ...(adminToken ? { "Cookie": `munazara_admin=${adminToken}` } : {})
+      },
       body: JSON.stringify({
         tournamentId,
         speakers: payload.speakers,

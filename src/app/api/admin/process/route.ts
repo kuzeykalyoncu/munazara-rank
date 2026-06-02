@@ -105,21 +105,60 @@ export async function POST(req: NextRequest) {
 
     // 2. Load / create speaker states
     const speakerMap: Record<string, SpeakerState> = {};
-    for (const sp of scraped) {
-      let cols = ["id", "elo", "total_tournaments", "career_avg_speak"];
-      if (hasMatchCountCol) cols.push("match_count");
-      if (hasMilestonesCol) cols.push("milestones");
-      if (hasCareerBreakCol) cols.push("career_break_count");
-      if (hasBrCountCol) cols.push("br_count", "br_bonus_total");
-      const selectQ = cols.join(", ");
+    const speakerNames = scraped.map(s => s.name);
+    
+    let cols = ["id", "name", "elo", "total_tournaments", "career_avg_speak"];
+    if (hasMatchCountCol) cols.push("match_count");
+    if (hasMilestonesCol) cols.push("milestones");
+    if (hasCareerBreakCol) cols.push("career_break_count");
+    if (hasBrCountCol) cols.push("br_count", "br_bonus_total");
+    const selectQ = cols.join(", ");
 
-      const { data } = await supabase.from("speakers").select(selectQ).eq("name", sp.name).single();
-      const existing: any = data;
+    // Fetch all existing speakers in a single batch query
+    const { data: existingSpeakersList, error: fetchErr } = await supabase
+      .from("speakers")
+      .select(selectQ)
+      .in("name", speakerNames);
 
+    if (fetchErr) throw new Error("Batch Fetch Speakers Error: " + fetchErr.message);
+
+    const existingMap = new Map<string, any>();
+    if (existingSpeakersList) {
+      for (const s of existingSpeakersList) {
+        existingMap.set((s as any).name, s);
+      }
+    }
+
+    const missingSpeakerNames = speakerNames.filter(name => !existingMap.has(name));
+
+    if (missingSpeakerNames.length > 0) {
+      const inserts = missingSpeakerNames.map(name => {
+        const insertObj: any = { name, elo: 1000, total_tournaments: 0, career_avg_speak: 0 };
+        if (hasMatchCountCol) insertObj.match_count = 0;
+        return insertObj;
+      });
+
+      // Insert all missing speakers in a single batch insert query
+      const { data: createdSpeakersList, error: insertErr } = await supabase
+        .from("speakers")
+        .insert(inserts)
+        .select(selectQ);
+
+      if (insertErr) throw new Error("Batch Insert Speakers Error: " + insertErr.message);
+
+      if (createdSpeakersList) {
+        for (const s of createdSpeakersList) {
+          existingMap.set((s as any).name, s);
+        }
+      }
+    }
+
+    for (const name of speakerNames) {
+      const existing = existingMap.get(name);
       if (existing) {
-        speakerMap[sp.name] = {
+        speakerMap[name] = {
           id: existing.id,
-          name: sp.name,
+          name: name,
           elo: existing.elo ?? 1000,
           matchCount: hasMatchCountCol ? (existing.match_count || 0) : ((existing.total_tournaments || 0) * 5),
           eloChange: 0,
@@ -127,27 +166,11 @@ export async function POST(req: NextRequest) {
           careerAvgSpeak: existing.career_avg_speak || 0,
           speakAvg: 0,
           milestones: existing.milestones || [],
-          // Cümülatif: DB'deki mevcut değerden başla
           careerBreakCount: hasCareerBreakCol ? (existing.career_break_count || 0) : (hasBrCountCol ? (existing.br_count || 0) : 0),
           brBonusTotal: hasBrCountCol ? (existing.br_bonus_total || 0) : 0,
           pairwiseWins: 0, pairwiseLosses: 0, pairwiseTies: 0,
           prelimSpeakTotal: 0, prelimRoundCount: 0,
         };
-      } else {
-        const insertObj: any = { name: sp.name, elo: 1000, total_tournaments: 0, career_avg_speak: 0 };
-        if (hasMatchCountCol) insertObj.match_count = 0;
-
-        const { data: created } = await supabase.from("speakers").insert(insertObj).select(selectQ).single();
-        const c: any = created;
-        if (c) {
-          speakerMap[sp.name] = {
-            id: c.id, name: sp.name, elo: 1000, matchCount: 0, eloChange: 0,
-            totalTournaments: 0, careerAvgSpeak: 0, speakAvg: 0, milestones: [],
-            careerBreakCount: 0, brBonusTotal: 0,
-            pairwiseWins: 0, pairwiseLosses: 0, pairwiseTies: 0,
-            prelimSpeakTotal: 0, prelimRoundCount: 0,
-          };
-        }
       }
     }
 
@@ -657,10 +680,24 @@ export async function POST(req: NextRequest) {
       const { error } = await supabase.from("elo_round_log").insert(roundLogInserts);
       if (error) console.error("Round log error:", error);
     }
-    for (const spUpdate of uniqueSpeakerUpdates) {
-      const { id, ...payload } = spUpdate;
-      const { error } = await supabase.from("speakers").update(payload).eq("id", id);
-      if (error) throw new Error(`Speaker update error (${id}): ` + error.message);
+    if (uniqueSpeakerUpdates.length > 0) {
+      const updateResults: any[] = [];
+      const chunkSize = 10;
+      for (let i = 0; i < uniqueSpeakerUpdates.length; i += chunkSize) {
+        const chunk = uniqueSpeakerUpdates.slice(i, i + chunkSize);
+        const promises = chunk.map(spUpdate => {
+          const { id, ...payload } = spUpdate;
+          return supabase.from("speakers").update(payload).eq("id", id);
+        });
+        const chunkResults = await Promise.all(promises);
+        updateResults.push(...chunkResults);
+      }
+      for (let i = 0; i < updateResults.length; i++) {
+        const r = updateResults[i];
+        if (r.error) {
+          throw new Error(`Speaker update error (${uniqueSpeakerUpdates[i].id}): ` + r.error.message);
+        }
+      }
     }
 
     const { error: tError } = await supabase.from("tournaments").update({ status: "processed" }).eq("id", tournamentId);
