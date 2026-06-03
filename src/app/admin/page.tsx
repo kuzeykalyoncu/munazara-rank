@@ -1575,34 +1575,34 @@ export default function AdminPage() {
                     {t.base_url}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <a
-                    href={`/api/admin/export?tournamentId=${t.id}`}
-                    download
-                    className={`opacity-0 group-hover:opacity-100 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition text-xs font-semibold hidden sm:flex ${t.status !== "processed" ? "pointer-events-none opacity-0" : ""}`}
-                  >
-                    <span>📊</span> Excel İndir
-                  </a>
+                <div className="flex flex-wrap items-center gap-2">
                   {t.raw_data && (
                     <button
                       onClick={() => handleReprocess(t)}
                       disabled={loading}
-                      className="opacity-0 group-hover:opacity-100 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition text-xs font-semibold disabled:opacity-50 hidden sm:flex"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/25 transition text-xs font-semibold disabled:opacity-50"
                     >
                       <span>⚡</span> {t.status === "processed" ? "Yeniden Analiz Et" : "Düzenle / Analiz Et"}
                     </button>
                   )}
+                  <a
+                    href={`/api/admin/export?tournamentId=${t.id}`}
+                    download
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 transition text-xs font-semibold ${t.status !== "processed" ? "hidden" : ""}`}
+                  >
+                    <span>📊</span> Excel İndir
+                  </a>
                   <button
                     onClick={() => handleSingleSync(t)}
                     disabled={loading || t.status === "processed"}
-                    className="opacity-0 group-hover:opacity-100 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition text-xs font-semibold disabled:opacity-0 hidden sm:flex"
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-green-500/15 text-green-400 border border-green-500/20 hover:bg-green-500/25 transition text-xs font-semibold disabled:opacity-50 ${t.status === "processed" ? "hidden" : ""}`}
                   >
                     <span>▶️</span> Yeniden Tara
                   </button>
                   <button
                     onClick={() => handleDeleteTournament(t)}
                     disabled={loading}
-                    className="opacity-0 group-hover:opacity-100 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition text-xs font-semibold disabled:opacity-50 hidden sm:flex"
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25 transition text-xs font-semibold disabled:opacity-50"
                     title="Turnuvayı Sil"
                   >
                     <span className="text-sm leading-none">🗑️</span>
@@ -1616,7 +1616,7 @@ export default function AdminPage() {
                   >
                     {t.status === "processed" ? "✓ İşlendi" : "⏳ Bekliyor"}
                   </span>
-                  <span className="text-gray-600 text-xs">
+                  <span className="text-gray-500 text-xs">
                     {new Date(t.created_at).toLocaleDateString("tr-TR")}
                   </span>
                 </div>
