@@ -617,11 +617,12 @@ async function fetchDebateRounds(baseUrl: string) {
                      if (!resText) {
                        continue;
                      }
+                     const lowerRes = resText.toLowerCase();
                      let rank = parseInt(resText, 10);
-                     if (resText.includes("1st")) rank = 1;
-                     if (resText.includes("2nd")) rank = 2;
-                     if (resText.includes("3rd")) rank = 3;
-                     if (resText.includes("4th")) rank = 4;
+                     if (lowerRes.includes("1st") || lowerRes.includes("advancing") || lowerRes.includes("success") || lowerRes.includes("win") || lowerRes.includes("champ")) rank = 1;
+                     if (lowerRes.includes("2nd")) rank = 2;
+                     if (lowerRes.includes("3rd") || lowerRes.includes("eliminated") || lowerRes.includes("danger") || lowerRes.includes("loss")) rank = 3;
+                     if (lowerRes.includes("4th")) rank = 4;
                      
                      if (isNaN(rank)) {
                        continue;
