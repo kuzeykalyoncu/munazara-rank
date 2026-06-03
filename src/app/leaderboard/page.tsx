@@ -26,10 +26,11 @@ function RankMedal({ rank }: { rank: number }) {
   return <span className="text-gray-500 font-mono text-sm w-6 text-center">{rank}</span>;
 }
 
-function SpeakerRow({ sp, rank, isUnranked = false }: { sp: Speaker; rank?: number; isUnranked?: boolean }) {
+function SpeakerRow({ sp, rank, isUnranked = false, sortBy = "current" }: { sp: Speaker; rank?: number; isUnranked?: boolean; sortBy?: "current" | "peak" }) {
   const avatarBg = isUnranked
     ? "bg-gradient-to-br from-gray-600 to-gray-700"
     : "bg-gradient-to-br from-indigo-500 to-violet-600 shadow shadow-indigo-500/30";
+  const eloToDisplay = sortBy === "peak" ? (sp.peak_elo ?? 1000) : sp.elo;
   return (
     <tr className={`border-b border-white/5 hover:bg-white/5 transition group ${isUnranked ? "opacity-60" : ""}`}>
       <td className="px-6 py-4">
@@ -46,16 +47,24 @@ function SpeakerRow({ sp, rank, isUnranked = false }: { sp: Speaker; rank?: numb
           </div>
           <div>
             <div className={`font-medium group-hover:text-indigo-400 transition ${isUnranked ? "text-gray-300" : "text-white"}`}>{sp.name}</div>
-            <div className="mt-0.5">
-              {isUnranked
-                ? <span className="text-xs px-2 py-0.5 rounded-full border font-medium text-gray-500 bg-gray-500/10 border-gray-600/40">Unranked</span>
-                : <EloBadge elo={sp.elo} />}
+            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+              {isUnranked ? (
+                <span className="text-xs px-2 py-0.5 rounded-full border font-medium text-gray-500 bg-gray-500/10 border-gray-600/40">Unranked</span>
+              ) : (
+                <EloBadge elo={eloToDisplay} />
+              )}
+              {sortBy === "peak" && sp.peak_elo_tournament && (
+                <span className="text-xs text-indigo-400/90 font-medium flex items-center gap-1">
+                  <span>🏆</span>
+                  <span>{sp.peak_elo_tournament}</span>
+                </span>
+              )}
             </div>
           </div>
         </Link>
       </td>
       <td className="px-6 py-4 text-right">
-        <span className={`font-bold font-mono ${isUnranked ? "text-lg text-gray-400" : "text-xl text-white"}`}>{sp.elo}</span>
+        <span className={`font-bold font-mono ${isUnranked ? "text-lg text-gray-400" : "text-xl text-white"}`}>{eloToDisplay}</span>
       </td>
       <td className={`px-6 py-4 text-right hidden md:table-cell ${isUnranked ? "text-gray-500" : "text-gray-400"}`}>{sp.total_tournaments}</td>
       <td className={`px-6 py-4 text-right hidden md:table-cell ${isUnranked ? "text-gray-500" : "text-gray-400"}`}>{sp.career_avg_speak?.toFixed(1) ?? "—"}</td>
@@ -65,11 +74,11 @@ function SpeakerRow({ sp, rank, isUnranked = false }: { sp: Speaker; rank?: numb
 
 const UNRANKED_MIN_TOURNAMENTS = 4; // 4. turnuvadan itibaren Ranked
 
-
 export default function LeaderboardPage() {
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"current" | "peak">("current");
 
   useEffect(() => {
     fetch("/api/leaderboard")
@@ -77,14 +86,40 @@ export default function LeaderboardPage() {
       .then((d) => { setSpeakers(d.speakers || []); setLoading(false); });
   }, []);
 
+  // Filter based on search query
   const filtered = speakers.filter((s) =>
     s.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Ranked (≥ 4 turnuva veya force_ranked) ve Unranked
-  const rankedFiltered = filtered.filter(s => (s.total_tournaments ?? 0) >= UNRANKED_MIN_TOURNAMENTS || s.force_ranked);
-  const unrankedFiltered = filtered.filter(s => (s.total_tournaments ?? 0) < UNRANKED_MIN_TOURNAMENTS && !s.force_ranked);
-  const globalRankedSpeakers = speakers.filter(s => (s.total_tournaments ?? 0) >= UNRANKED_MIN_TOURNAMENTS || s.force_ranked);
+  // Sort according to current or peak ELO
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    if (sortBy === "peak") {
+      const peakA = a.peak_elo ?? 1000;
+      const peakB = b.peak_elo ?? 1000;
+      return peakB - peakA;
+    }
+    return b.elo - a.elo;
+  });
+
+  // Split into Ranked vs Unranked
+  const rankedFiltered = sortedFiltered.filter(s => (s.total_tournaments ?? 0) >= UNRANKED_MIN_TOURNAMENTS || s.force_ranked);
+  const unrankedFiltered = sortedFiltered.filter(s => (s.total_tournaments ?? 0) < UNRANKED_MIN_TOURNAMENTS && !s.force_ranked);
+
+  // For global ranked speakers list (to calculate absolute rank correctly)
+  const globalRankedSpeakers = [...speakers]
+    .filter(s => (s.total_tournaments ?? 0) >= UNRANKED_MIN_TOURNAMENTS || s.force_ranked)
+    .sort((a, b) => {
+      if (sortBy === "peak") {
+        return (b.peak_elo ?? 1000) - (a.peak_elo ?? 1000);
+      }
+      return b.elo - a.elo;
+    });
+
+  const maxEloDisplay = speakers.length > 0
+    ? (sortBy === "peak" 
+        ? Math.max(...speakers.map(s => s.peak_elo ?? 1000)) 
+        : (speakers[0]?.elo ?? 1000))
+    : "—";
 
   return (
     <div className="space-y-8">
@@ -102,8 +137,8 @@ export default function LeaderboardPage() {
       <div className="grid grid-cols-3 gap-4">
         {[
           { label: "Toplam Konuşmacı", value: globalRankedSpeakers.length, icon: "🎙️" },
-          { label: "En Yüksek ELO", value: speakers[0]?.elo ?? "—", icon: "👑" },
-          { label: "Ort. ELO", value: speakers.length ? Math.round(speakers.reduce((a, s) => a + s.elo, 0) / speakers.length) : "—", icon: "📊" },
+          { label: sortBy === "peak" ? "En Yüksek Zirve ELO" : "En Yüksek ELO", value: maxEloDisplay, icon: "👑" },
+          { label: "Ort. ELO", value: speakers.length ? Math.round(speakers.reduce((a, s) => a + (sortBy === "peak" ? (s.peak_elo ?? 1000) : s.elo), 0) / speakers.length) : "—", icon: "📊" },
         ].map((s) => (
           <div key={s.label} className="glass rounded-2xl p-5 text-center">
             <div className="text-3xl mb-1">{s.icon}</div>
@@ -113,16 +148,40 @@ export default function LeaderboardPage() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">🔍</span>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Konuşmacı ara..."
-          className="w-full bg-white/5 border border-white/10 rounded-xl px-10 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-        />
+      {/* Controls: Segmented Sort Switcher & Search */}
+      <div className="flex flex-col md:flex-row gap-4 justify-between items-stretch md:items-center bg-white/5 border border-white/10 rounded-2xl p-4">
+        <div className="flex bg-black/20 p-1.5 rounded-xl border border-white/5 self-start">
+          <button
+            onClick={() => setSortBy("current")}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 ${
+              sortBy === "current"
+                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            📈 Güncel ELO
+          </button>
+          <button
+            onClick={() => setSortBy("peak")}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 ${
+              sortBy === "peak"
+                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            👑 Zirve ELO (Peak)
+          </button>
+        </div>
+        <div className="relative flex-1 md:max-w-xs">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">🔍</span>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Konuşmacı ara..."
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-10 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+          />
+        </div>
       </div>
 
       <div className="glass rounded-2xl overflow-hidden">
@@ -143,7 +202,7 @@ export default function LeaderboardPage() {
               <tr className="border-b border-white/10 text-gray-400 text-xs uppercase tracking-wider">
                 <th className="px-6 py-4 text-left w-16">Sıra</th>
                 <th className="px-6 py-4 text-left">Konuşmacı</th>
-                <th className="px-6 py-4 text-right">ELO</th>
+                <th className="px-6 py-4 text-right">{sortBy === "peak" ? "ZİRVE ELO" : "ELO"}</th>
                 <th className="px-6 py-4 text-right hidden md:table-cell">Turnuva</th>
                 <th className="px-6 py-4 text-right hidden md:table-cell">Ort. Speak</th>
               </tr>
@@ -151,7 +210,7 @@ export default function LeaderboardPage() {
             <tbody>
               {rankedFiltered.map((sp) => {
                 const globalRank = globalRankedSpeakers.findIndex((s) => s.id === sp.id) + 1;
-                return <SpeakerRow key={sp.id} sp={sp} rank={globalRank} />;
+                return <SpeakerRow key={sp.id} sp={sp} rank={globalRank} sortBy={sortBy} />;
               })}
               {unrankedFiltered.length > 0 && (
                 <>
@@ -163,7 +222,7 @@ export default function LeaderboardPage() {
                     </td>
                   </tr>
                   {unrankedFiltered.map((sp) => (
-                    <SpeakerRow key={sp.id} sp={sp} isUnranked={true} />
+                    <SpeakerRow key={sp.id} sp={sp} isUnranked={true} sortBy={sortBy} />
                   ))}
                 </>
               )}

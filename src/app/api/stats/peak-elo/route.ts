@@ -5,7 +5,24 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    // 1. Fetch all elo_history records with their related speaker and tournament names using pagination
+    // 1. Try optimized query from speakers table
+    const { data: speakers, error: spErr } = await supabase
+      .from("speakers")
+      .select("id, name, peak_elo, peak_elo_tournament")
+      .order("peak_elo", { ascending: false })
+      .limit(10);
+
+    if (!spErr && speakers && speakers.length > 0 && speakers.some(s => s.peak_elo !== undefined)) {
+      const peakElos = speakers.map(s => ({
+        speakerId: s.id,
+        name: s.name,
+        peakElo: s.peak_elo || 1000,
+        tournamentName: s.peak_elo_tournament || "Başlangıç"
+      }));
+      return NextResponse.json({ peakElos });
+    }
+
+    // 2. Fallback: Fetch all elo_history records and group dynamically
     const allHistory: any[] = [];
     let page = 0;
     const pageSize = 1000;
@@ -28,7 +45,6 @@ export async function GET() {
       return NextResponse.json({ peakElos: [] });
     }
 
-    // 2. Group by speaker_id and find the maximum elo_after
     const peakMap = new Map<string, { speakerId: string; name: string; peakElo: number; tournamentName: string }>();
 
     for (const row of allHistory) {
@@ -48,7 +64,6 @@ export async function GET() {
       }
     }
 
-    // 3. Convert to array, sort descending by peakElo, take top 10
     const topPeaks = Array.from(peakMap.values())
       .sort((a, b) => b.peakElo - a.peakElo)
       .slice(0, 10);

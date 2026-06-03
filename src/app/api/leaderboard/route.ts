@@ -7,7 +7,7 @@ export async function GET() {
   try {
     const { data, error } = await supabase
       .from("speakers")
-      .select("id, name, elo, total_tournaments, career_avg_speak, win_rate, prelim_round_count, career_break_count, force_ranked")
+      .select("id, name, elo, total_tournaments, career_avg_speak, win_rate, prelim_round_count, career_break_count, force_ranked, peak_elo, peak_elo_tournament")
       .order("elo", { ascending: false })
       .limit(600);
 

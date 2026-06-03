@@ -43,6 +43,8 @@ interface SpeakerProfile {
     br_count: number;
     br_bonus_total: number;
     career_break_count: number;
+    peak_elo?: number;
+    peak_elo_tournament?: string | null;
   };
   eloHistory: {
     id: string;
@@ -359,9 +361,14 @@ export default function SpeakerProfilePage() {
         </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6">
           <StatCard label="Turnuva" value={speaker.total_tournaments} />
           <StatCard label="Ort. Prelim SP" value={speaker.career_avg_speak?.toFixed(1) ?? "—"} />
+          <StatCard 
+            label="Zirve ELO" 
+            value={speaker.peak_elo ?? 1000} 
+            sub={speaker.peak_elo_tournament ? `🏆 ${speaker.peak_elo_tournament}` : undefined} 
+          />
           <StatCard label="H2H Maç" value={totalH2H} />
           {/* Break Sayısı — tıklanabilir */}
           <div className="relative z-50">

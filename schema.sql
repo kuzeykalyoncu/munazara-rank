@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS speakers (
   -- Prelim-only SP (career_avg_speak kaynağı)
   prelim_speak_total NUMERIC(10,2) NOT NULL DEFAULT 0,
   prelim_round_count INTEGER NOT NULL DEFAULT 0,
+  -- Peak ELO tracking
+  peak_elo INTEGER NOT NULL DEFAULT 1000,
+  peak_elo_tournament TEXT DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

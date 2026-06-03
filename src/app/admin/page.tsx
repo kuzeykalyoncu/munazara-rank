@@ -439,7 +439,18 @@ export default function AdminPage() {
       const { data: tournament, error: insertError } = await supabase
         .from("tournaments")
         .upsert(
-          { name: data.tournamentName, base_url: cleanUrl, status: "pending" },
+          { 
+            name: data.tournamentName, 
+            base_url: cleanUrl, 
+            status: "pending",
+            raw_data: {
+              speakers: data.speakers,
+              teams: data.teams,
+              results: data.results,
+              breakCount: data.inferredBreakCount || null,
+              overrideBreaks: {},
+            }
+          },
           { onConflict: "base_url" }
         )
         .select()
@@ -490,6 +501,38 @@ export default function AdminPage() {
       setStatus("✅ Önizleme hazır. Break tespitlerini kontrol edin ve onaylayın.");
     } catch { setStatus("❌ Önizleme sırasında hata oluştu."); }
     finally { setLoading(false); }
+  }
+
+  async function handleSaveDraft() {
+    if (!currentTournamentId) { setStatus("❌ Önce turnuvayı seçin."); return; }
+    const dataToUse = editableData && scrapePreview ? reconstructScrapeData(editableData, scrapePreview) : scrapePreview;
+    if (!dataToUse) { setStatus("❌ Veri bulunamadı."); return; }
+    setLoading(true);
+    setStatus("💾 Taslak kaydediliyor...");
+    try {
+      const { error } = await supabase
+        .from("tournaments")
+        .update({
+          raw_data: {
+            speakers: dataToUse.speakers,
+            teams: dataToUse.teams,
+            results: dataToUse.results,
+            breakCount: breakCountInput || breakCount || dataToUse.inferredBreakCount || null,
+            overrideBreaks: overrideBreaks || {},
+          }
+        })
+        .eq("id", currentTournamentId);
+        
+      if (error) throw new Error(error.message);
+      
+      setStatus("✅ Taslak başarıyla kaydedildi!");
+      setTimeout(() => setStatus(""), 3000);
+      loadTournaments();
+    } catch (e: any) {
+      setStatus(`❌ Taslak kaydedilirken hata: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleFinalize() {
@@ -1022,6 +1065,10 @@ export default function AdminPage() {
                 className="px-3 py-2 rounded-lg bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10 transition text-sm">
                 ✕ İptal
               </button>
+              <button onClick={handleSaveDraft} disabled={loading}
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition disabled:opacity-50 text-sm flex items-center gap-1">
+                💾 Taslağı Kaydet
+              </button>
               <button onClick={handlePreview} disabled={loading}
                 className="px-5 py-2 rounded-lg bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold hover:from-indigo-500 hover:to-violet-500 transition-all shadow-lg shadow-indigo-500/30 disabled:opacity-50 text-sm">
                 {loading ? "Hesaplanıyor..." : "🔍 ELO Önizle"}
@@ -1542,7 +1589,7 @@ export default function AdminPage() {
                       disabled={loading}
                       className="opacity-0 group-hover:opacity-100 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition text-xs font-semibold disabled:opacity-50 hidden sm:flex"
                     >
-                      <span>⚡</span> Yeniden Analiz Et
+                      <span>⚡</span> {t.status === "processed" ? "Yeniden Analiz Et" : "Düzenle / Analiz Et"}
                     </button>
                   )}
                   <button

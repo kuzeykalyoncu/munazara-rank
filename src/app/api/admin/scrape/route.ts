@@ -411,10 +411,16 @@ function parseResults(html: string): ScrapeResult["results"] {
     const href = $(el).attr("href") || "";
     if (href.includes("/results/round/")) {
       const text = $(el).text().trim().toLowerCase();
-      if (text.includes("octo")) maxBreakCount = Math.max(maxBreakCount, 32);
-      else if (text.includes("çeyrek") || text.includes("quarter")) maxBreakCount = Math.max(maxBreakCount, 16);
-      else if (text.includes("yarı") || text.includes("semi")) maxBreakCount = Math.max(maxBreakCount, 8);
-      else if (text.includes("final")) maxBreakCount = Math.max(maxBreakCount, 4);
+      const isPartial = text.includes("partial") || text.includes("pre") || text.includes("ön");
+      if (text.includes("octo") || text.includes("sekiz")) {
+        maxBreakCount = Math.max(maxBreakCount, isPartial ? 48 : 32);
+      } else if (text.includes("çeyrek") || text.includes("quarter")) {
+        maxBreakCount = Math.max(maxBreakCount, isPartial ? 24 : 16);
+      } else if (text.includes("yarı") || text.includes("semi")) {
+        maxBreakCount = Math.max(maxBreakCount, isPartial ? 12 : 8);
+      } else if (text.includes("final")) {
+        maxBreakCount = Math.max(maxBreakCount, 4);
+      }
     }
   });
 
@@ -549,10 +555,18 @@ async function fetchDebateRounds(baseUrl: string) {
               if (titleMatch) {
                  const titleText = (titleMatch[1] || titleMatch[2] || "").toLowerCase();
                  isOutround = /final|çeyrek|yarı|quarter|octo|semi/i.test(titleText);
-                 if (/final/i.test(titleText) && !/yarı|semi|çeyrek|quarter|octo/.test(titleText)) roundName = "Final";
-                 else if (/yarı|semi/i.test(titleText)) roundName = "Yarı Final";
-                 else if (/çeyrek|quarter/i.test(titleText)) roundName = "Çeyrek Final";
-                 else if (/octo/i.test(titleText)) roundName = "Sekizinci Final";
+                 if (/final/i.test(titleText) && !/yarı|semi|çeyrek|quarter|octo/.test(titleText)) {
+                   roundName = "Final";
+                 } else if (/yarı|semi/i.test(titleText)) {
+                   if (/partial|pre/i.test(titleText)) roundName = "Ön Çeyrek Final";
+                   else roundName = "Yarı Final";
+                 } else if (/çeyrek|quarter/i.test(titleText)) {
+                   if (/partial|pre/i.test(titleText)) roundName = "Ön Sekizinci Final";
+                   else roundName = "Çeyrek Final";
+                 } else if (/octo/i.test(titleText)) {
+                   if (/partial|pre/i.test(titleText)) roundName = "Ön On Altıncı Final";
+                   else roundName = "Sekizinci Final";
+                 }
               }
 
               const adjIdx = head.findIndex((h: any) => (h.key || "").toLowerCase().includes("adj") || (h.title || "").toLowerCase().includes("adj"));
@@ -594,18 +608,24 @@ async function fetchDebateRounds(baseUrl: string) {
                       text = cell.popover.title;
                    }
                    text = text.toString().replace(/<[^>]*>/g, "").trim();
-                   text = normalizeTeamName(text);
                    
                    const adjHtml = row[adjIdx]?.text || "";
                    const adjText = adjHtml.replace(/<[^>]*>/g, "").trim();
                    
                    if (text && adjText) {
-                     const resText = row[resIdx]?.text || "";
-                     let rank = parseInt(resText.replace(/<[^>]*>/g, "").trim(), 10) || 4;
+                     const resText = (row[resIdx]?.text || "").replace(/<[^>]*>/g, "").trim();
+                     if (!resText) {
+                       continue;
+                     }
+                     let rank = parseInt(resText, 10);
                      if (resText.includes("1st")) rank = 1;
                      if (resText.includes("2nd")) rank = 2;
                      if (resText.includes("3rd")) rank = 3;
                      if (resText.includes("4th")) rank = 4;
+                     
+                     if (isNaN(rank)) {
+                       continue;
+                     }
                      
                      if (!viewByTeamRoomsMap[adjText]) viewByTeamRoomsMap[adjText] = [];
                      viewByTeamRoomsMap[adjText].push({ name: normalizeName(text), sort: 5 - rank });
@@ -715,18 +735,34 @@ export async function POST(req: NextRequest) {
        if (title) tournamentName = title.split("|")[0].trim();
     }
 
-    // Initialize break array based on highest confidence count (admin manual input overrides inference)
-    let finalBreakCount = 0;
-    if (breakCount && !isNaN(breakCount) && breakCount > 0) {
-      finalBreakCount = parseInt(breakCount, 10);
-    } else if (inferredBreakCount > 0) {
-      finalBreakCount = inferredBreakCount;
-    }
+     // Initialize break array based on highest confidence count (admin manual input overrides inference)
+     let finalBreakCount = 0;
+     if (breakCount && !isNaN(breakCount) && breakCount > 0) {
+       finalBreakCount = parseInt(breakCount, 10);
+     } else if (inferredBreakCount > 0) {
+       finalBreakCount = inferredBreakCount;
+     }
+ 
+     // Gather all teams that participated in any outround room
+     const outroundTeams = new Set<string>();
+     if (results.rooms) {
+       for (const room of results.rooms) {
+         if (room.isOutround && room.placements) {
+           for (const team of room.placements) {
+             outroundTeams.add(team.toLowerCase());
+           }
+         }
+       }
+     }
 
-    if (finalBreakCount > 0 && teams.length > 0) {
-      const topTeams = teams.slice(0, finalBreakCount).map(t => t.name.toLowerCase());
-      results.breaks = topTeams; 
-    }
+     if (finalBreakCount > 0 && teams.length > 0) {
+       const topTeams = teams.slice(0, finalBreakCount).map(t => t.name.toLowerCase());
+       // Merge them to ensure any team that participated in outrounds or is in top slice is included
+       const mergedBreaks = new Set([...topTeams, ...outroundTeams]);
+       results.breaks = Array.from(mergedBreaks);
+     } else if (outroundTeams.size > 0) {
+       results.breaks = Array.from(outroundTeams);
+     }
 
     return NextResponse.json({
       success: true,

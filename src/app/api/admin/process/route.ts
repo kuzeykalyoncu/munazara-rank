@@ -35,6 +35,8 @@ interface SpeakerState {
   // Prelim-only SP (Avg SP kaynağı)
   prelimSpeakTotal: number;
   prelimRoundCount: number;
+  peakElo: number;
+  peakEloTournament: string | null;
 }
 
 function expectedScore(ratingA: number, ratingB: number): number {
@@ -55,6 +57,9 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(scraped) || !Array.isArray(teams) || !results || !Array.isArray(results.rooms)) {
       throw new Error("Gelen verilerde eksik veya hatalı dizi (array) mevcut.");
     }
+
+    const { data: tData } = await supabase.from("tournaments").select("name").eq("id", tournamentId).single();
+    const tournamentName = tData?.name || "Bilinmeyen Turnuva";
 
     console.log(`Processing ${tournamentId} [dryRun=${dryRun}]: ${scraped.length} speakers, ${teams.length} teams, ${results.rooms.length} rooms`);
 
@@ -103,6 +108,9 @@ export async function POST(req: NextRequest) {
     let hasBrCountCol = false;
     try { const { error } = await supabase.from("speakers").select("br_count").limit(1); if (!error) hasBrCountCol = true; } catch(e) {}
 
+    let hasPeakEloCol = false;
+    try { const { error } = await supabase.from("speakers").select("peak_elo").limit(1); if (!error) hasPeakEloCol = true; } catch(e) {}
+
     // 2. Load / create speaker states
     const speakerMap: Record<string, SpeakerState> = {};
     const speakerNames = scraped.map(s => s.name);
@@ -112,6 +120,7 @@ export async function POST(req: NextRequest) {
     if (hasMilestonesCol) cols.push("milestones");
     if (hasCareerBreakCol) cols.push("career_break_count");
     if (hasBrCountCol) cols.push("br_count", "br_bonus_total");
+    if (hasPeakEloCol) cols.push("peak_elo", "peak_elo_tournament");
     const selectQ = cols.join(", ");
 
     // Fetch all existing speakers in a single batch query
@@ -135,6 +144,10 @@ export async function POST(req: NextRequest) {
       const inserts = missingSpeakerNames.map(name => {
         const insertObj: any = { name, elo: 1000, total_tournaments: 0, career_avg_speak: 0 };
         if (hasMatchCountCol) insertObj.match_count = 0;
+        if (hasPeakEloCol) {
+          insertObj.peak_elo = 1000;
+          insertObj.peak_elo_tournament = null;
+        }
         return insertObj;
       });
 
@@ -170,6 +183,8 @@ export async function POST(req: NextRequest) {
           brBonusTotal: hasBrCountCol ? (existing.br_bonus_total || 0) : 0,
           pairwiseWins: 0, pairwiseLosses: 0, pairwiseTies: 0,
           prelimSpeakTotal: 0, prelimRoundCount: 0,
+          peakElo: hasPeakEloCol ? (existing.peak_elo ?? 1000) : 1000,
+          peakEloTournament: hasPeakEloCol ? (existing.peak_elo_tournament ?? null) : null,
         };
       }
     }
@@ -490,7 +505,10 @@ export async function POST(req: NextRequest) {
       // Milestones
       if (room.isOutround) {
         let stageName = "Outround";
-        if (rName.includes("final") && !rName.includes("yarı") && !rName.includes("çeyrek") && !rName.includes("octo")) stageName = "Finalist";
+        if (rName.includes("ön yarı") || rName.includes("pre-semi") || rName.includes("partial semi") || rName.includes("partialsemi")) stageName = "Ön Yarı Finalist";
+        else if (rName.includes("ön çeyrek") || rName.includes("pre-quarter") || rName.includes("partial quarter") || rName.includes("partialquarter")) stageName = "Ön Çeyrek Finalist";
+        else if (rName.includes("ön sekiz") || rName.includes("pre-octo") || rName.includes("partial octo") || rName.includes("partialocto")) stageName = "Ön Sekizinci Finalist";
+        else if (rName.includes("final") && !rName.includes("yarı") && !rName.includes("çeyrek") && !rName.includes("octo")) stageName = "Finalist";
         else if (rName.includes("yarı") || rName.includes("semi")) stageName = "Yarı Finalist";
         else if (rName.includes("çeyrek") || rName.includes("quarter")) stageName = "Çeyrek Finalist";
         else if (rName.includes("octo") || rName.includes("sekiz")) stageName = "Octofinalist";
@@ -646,9 +664,18 @@ export async function POST(req: NextRequest) {
       const newWinRate = totalPairwise > 0
         ? ((spData.pairwiseWins + spData.pairwiseTies * 0.5) / totalPairwise) * 100 : 0;
 
+      // Calculate Peak ELO
+      let newPeak = spData.peakElo;
+      let newPeakTournament = spData.peakEloTournament;
+      const eloAfterRounded = Math.round(spData.elo);
+      if (eloAfterRounded > newPeak || (newPeak === 1000 && !newPeakTournament)) {
+        newPeak = eloAfterRounded;
+        newPeakTournament = tournamentName;
+      }
+
       const spUpdateObj: any = {
         id: spData.id,
-        elo: Math.round(spData.elo),
+        elo: eloAfterRounded,
         total_tournaments: newTotalTournaments,
         career_avg_speak: Math.round(newCareerAvg * 100) / 100,
         win_rate: Math.round(newWinRate * 100) / 100,
@@ -656,6 +683,10 @@ export async function POST(req: NextRequest) {
       if (hasMatchCountCol) spUpdateObj.match_count = spData.matchCount;
       if (hasBrCountCol) { spUpdateObj.br_count = didBreak ? 1 : 0; spUpdateObj.br_bonus_total = spData.brBonusTotal; }
       if (hasCareerBreakCol) spUpdateObj.career_break_count = spData.careerBreakCount;
+      if (hasPeakEloCol) {
+        spUpdateObj.peak_elo = newPeak;
+        spUpdateObj.peak_elo_tournament = newPeakTournament;
+      }
 
       speakerUpdates.push(spUpdateObj);
     }

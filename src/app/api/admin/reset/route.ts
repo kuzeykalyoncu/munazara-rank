@@ -23,6 +23,8 @@ export async function POST() {
       total_tournaments: 0,
       career_avg_speak: 0,
       win_rate: 0,
+      peak_elo: 1000,
+      peak_elo_tournament: null,
     };
 
     try { const { error } = await supabase.from("speakers").select("match_count").limit(1); if (!error) updateObj.match_count = 0; } catch(e) {}

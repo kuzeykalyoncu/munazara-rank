@@ -29,6 +29,8 @@ export type Speaker = {
   prelim_round_count?: number;
   career_break_count?: number;
   force_ranked?: boolean;
+  peak_elo?: number;
+  peak_elo_tournament?: string | null;
   created_at: string;
 };
 
