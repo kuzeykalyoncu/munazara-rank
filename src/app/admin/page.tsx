@@ -462,6 +462,7 @@ export default function AdminPage() {
       } else if (tournament) {
         setCurrentTournamentId(tournament.id);
         setStatus(`✅ Tara tamamlandı! ${data.speakers.length} konuşmacı bulundu.`);
+        loadTournaments();
         return { tournamentId: tournament.id, ...data };
       }
     } catch {
