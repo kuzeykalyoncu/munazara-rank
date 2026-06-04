@@ -30,6 +30,33 @@ function toTitleCase(name: string): string {
     .join(" ");
 }
 
+function checkTeamBreak(teamName: string, speakerName: string, breakSet: Set<string>): boolean {
+  const cleanTeam = teamName.trim().toLowerCase();
+  const cleanSpeaker = speakerName.trim().toLowerCase();
+  
+  for (const b of breakSet) {
+    const cleanB = b.trim().toLowerCase();
+    if (!cleanB) continue;
+
+    // Exact match (safest)
+    if (cleanTeam === cleanB || cleanSpeaker === cleanB) {
+      return true;
+    }
+
+    // Substring match only for break team names that are reasonably long (>= 3 chars)
+    // to prevent matching short team names like "A", "B", "C" as substrings of other names
+    if (cleanB.length >= 3) {
+      if (cleanTeam && (cleanTeam.includes(cleanB) || cleanB.includes(cleanTeam))) {
+        return true;
+      }
+      if (cleanSpeaker && (cleanSpeaker.includes(cleanB) || cleanB.includes(cleanSpeaker))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body: ProcessManualInput = await req.json();
@@ -273,7 +300,7 @@ export async function POST(req: NextRequest) {
     const BREAK_BONUS = 5;
 
     for (const team of teams) {
-      const isBreak = [...breakSet].some(b => team.teamName.toLowerCase().includes(b) || b.includes(team.teamName.toLowerCase()));
+      const isBreak = checkTeamBreak(team.teamName, "", breakSet);
       if (isBreak) {
         for (const spName of team.speakers) {
           const sp = speakerMap[spName];
@@ -288,7 +315,7 @@ export async function POST(req: NextRequest) {
 
     // 5. Final H2H — pairwise between finalists
     // Champion beats all, others are ties between each other (isFullFinal logic)
-    const finalTeams = teams.filter(t => finalists.some(f => t.teamName.toLowerCase().includes(f.toLowerCase()) || f.toLowerCase().includes(t.teamName.toLowerCase())));
+    const finalTeams = teams.filter(t => checkTeamBreak(t.teamName, "", new Set(finalists)));
     const championTeam = finalTeams.find(t => t.teamName.toLowerCase().includes(champion.toLowerCase()) || champion.toLowerCase().includes(t.teamName.toLowerCase()));
 
     const FINAL_K = 60;

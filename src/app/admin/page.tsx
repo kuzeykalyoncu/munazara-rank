@@ -1256,7 +1256,13 @@ export default function AdminPage() {
             <div className="p-4 space-y-3 max-h-[65vh] overflow-y-auto">
               <p className="text-gray-500 text-xs">Break yapan takımları işaretleyin. Seçili takım üyelerine +5 Elo break bonusu verilir.</p>
               {scrapePreview?.teams?.map((t: any, ti: number) => {
-                const isBreak = editableData.breakTeams.some(b => b === t.name.toLowerCase() || b.includes(t.name.toLowerCase()) || t.name.toLowerCase().includes(b));
+                const isBreak = editableData.breakTeams.some(b => {
+                  const cleanB = b.trim().toLowerCase();
+                  const cleanT = t.name.trim().toLowerCase();
+                  if (cleanB === cleanT) return true;
+                  if (cleanB.length >= 3 && (cleanT.includes(cleanB) || cleanB.includes(cleanT))) return true;
+                  return false;
+                });
                 return (
                   <div key={ti} onClick={() => {
                     setEditableData(prev => {

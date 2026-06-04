@@ -49,6 +49,33 @@ function getKFactor(matchCount: number): number {
   return 30;                          // Veteran
 }
 
+function checkTeamBreak(teamName: string, speakerName: string, breakSet: Set<string>): boolean {
+  const cleanTeam = teamName.trim().toLowerCase();
+  const cleanSpeaker = speakerName.trim().toLowerCase();
+  
+  for (const b of breakSet) {
+    const cleanB = b.trim().toLowerCase();
+    if (!cleanB) continue;
+
+    // Exact match (safest)
+    if (cleanTeam === cleanB || cleanSpeaker === cleanB) {
+      return true;
+    }
+
+    // Substring match only for break team names that are reasonably long (>= 3 chars)
+    // to prevent matching short team names like "A", "B", "C" as substrings of other names
+    if (cleanB.length >= 3) {
+      if (cleanTeam && (cleanTeam.includes(cleanB) || cleanB.includes(cleanTeam))) {
+        return true;
+      }
+      if (cleanSpeaker && (cleanSpeaker.includes(cleanB) || cleanB.includes(cleanSpeaker))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body: ProcessInput = await req.json();
@@ -553,7 +580,7 @@ export async function POST(req: NextRequest) {
       const teamName = speakerTeamMap[spName] || "";
       const didBreak = speaker.id in overrideBreaks
         ? overrideBreaks[speaker.id]
-        : [...breakSet].some(b => teamName.includes(b) || b.includes(teamName));
+        : checkTeamBreak(teamName, spName, breakSet);
 
       if (didBreak) {
         speaker.elo += BREAK_BONUS;
@@ -578,7 +605,7 @@ export async function POST(req: NextRequest) {
         const teamName = speakerTeamMap[sp.name] || "";
         const didBreak = spData.id in overrideBreaks
           ? overrideBreaks[spData.id]
-          : [...breakSet].some(b => teamName.includes(b) || b.includes(teamName));
+          : checkTeamBreak(teamName, sp.name, breakSet);
         const prelimSpeakAvg = spData.prelimRoundCount > 0
           ? spData.prelimSpeakTotal / spData.prelimRoundCount : 0;
         const spRounds = roundLogInserts.filter(r => r.speaker_id === spData.id);
@@ -627,7 +654,7 @@ export async function POST(req: NextRequest) {
 
       const didBreak = spData.id in overrideBreaks
         ? overrideBreaks[spData.id]
-        : [...breakSet].some(b => spTeamLower.includes(b) || b.includes(spTeamLower) || nameLower.includes(b));
+        : checkTeamBreak(spTeamLower, sp.name, breakSet);
       const didFinal = [...finalSet].some(f => spTeamLower.includes(f) || f.includes(spTeamLower) || nameLower.includes(f));
       const didChamp = [...championSet].some(c => spTeamLower.includes(c) || c.includes(spTeamLower) || nameLower.includes(c));
 
