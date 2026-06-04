@@ -13,7 +13,14 @@ export async function GET() {
 
     if (error) throw error;
 
-    return NextResponse.json({ speakers: data });
+    return NextResponse.json(
+      { speakers: data },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
+        },
+      }
+    );
   } catch (error) {
     console.error("Leaderboard error:", error);
     return NextResponse.json(

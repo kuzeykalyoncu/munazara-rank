@@ -67,15 +67,22 @@ export async function GET(
       console.log("elo_round_log not available");
     }
 
-    return NextResponse.json({
-      speaker,
-      eloHistory: eloHistory || [],
-      h2hWins: h2hWins || [],
-      h2hLosses: h2hLosses || [],
-      h2hTies: h2hTies || [],
-      tournamentStats: tournamentStats || [],
-      roundLogs,
-    });
+    return NextResponse.json(
+      {
+        speaker,
+        eloHistory: eloHistory || [],
+        h2hWins: h2hWins || [],
+        h2hLosses: h2hLosses || [],
+        h2hTies: h2hTies || [],
+        tournamentStats: tournamentStats || [],
+        roundLogs,
+      },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
+        },
+      }
+    );
   } catch (error) {
     console.error("Speaker profile error:", error);
     return NextResponse.json({ error: "Profil yüklenirken hata oluştu." }, { status: 500 });

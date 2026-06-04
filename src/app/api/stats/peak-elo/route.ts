@@ -19,7 +19,14 @@ export async function GET() {
         peakElo: s.peak_elo || 1000,
         tournamentName: s.peak_elo_tournament || "Başlangıç"
       }));
-      return NextResponse.json({ peakElos });
+      return NextResponse.json(
+        { peakElos },
+        {
+          headers: {
+            "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
+          },
+        }
+      );
     }
 
     // 2. Fallback: Fetch all elo_history records and group dynamically
@@ -68,7 +75,14 @@ export async function GET() {
       .sort((a, b) => b.peakElo - a.peakElo)
       .slice(0, 10);
 
-    return NextResponse.json({ peakElos: topPeaks });
+    return NextResponse.json(
+      { peakElos: topPeaks },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
+        },
+      }
+    );
   } catch (error) {
     console.error("Peak ELO error:", error);
     return NextResponse.json(
