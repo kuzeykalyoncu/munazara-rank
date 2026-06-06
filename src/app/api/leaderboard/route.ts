@@ -9,7 +9,7 @@ export async function GET() {
       .from("speakers")
       .select("id, name, elo, total_tournaments, career_avg_speak, win_rate, prelim_round_count, career_break_count, force_ranked, peak_elo, peak_elo_tournament")
       .order("elo", { ascending: false })
-      .limit(600);
+      .limit(2000);
 
     if (error) throw error;
 
