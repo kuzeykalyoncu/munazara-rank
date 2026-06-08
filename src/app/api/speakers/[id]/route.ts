@@ -47,11 +47,18 @@ export async function GET(
       .or(`winner_id.eq.${id},loser_id.eq.${id}`);
 
     // Tournament stats with partner info
-    const { data: tournamentStats } = await supabase
+    const { data: statsData, error: statsErr } = await supabase
       .from("tournament_stats")
-      .select("*, tournament_id, tournaments(id, name, base_url), partner:speakers!tournament_stats_partner_id_fkey(name, elo)")
-      .eq("speaker_id", id)
-      .order("tournaments(created_at)", { ascending: false });
+      .select("*, tournament_id, tournaments(id, name, base_url, created_at), partner:speakers!tournament_stats_partner_id_fkey(name, elo)")
+      .eq("speaker_id", id);
+
+    if (statsErr) throw statsErr;
+
+    const tournamentStats = statsData ? [...statsData].sort((a: any, b: any) => {
+      const dateA = a.tournaments?.created_at ? new Date(a.tournaments.created_at).getTime() : 0;
+      const dateB = b.tournaments?.created_at ? new Date(b.tournaments.created_at).getTime() : 0;
+      return dateB - dateA;
+    }) : [];
 
     // Per-round Elo audit log (for tournament detail modal)
     let roundLogs: any[] = [];
