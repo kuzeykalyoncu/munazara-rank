@@ -708,7 +708,7 @@ export async function POST(req: NextRequest) {
         win_rate: Math.round(newWinRate * 100) / 100,
       };
       if (hasMatchCountCol) spUpdateObj.match_count = spData.matchCount;
-      if (hasBrCountCol) { spUpdateObj.br_count = didBreak ? 1 : 0; spUpdateObj.br_bonus_total = spData.brBonusTotal; }
+      if (hasBrCountCol) { spUpdateObj.br_count = spData.careerBreakCount; spUpdateObj.br_bonus_total = spData.brBonusTotal; }
       if (hasCareerBreakCol) spUpdateObj.career_break_count = spData.careerBreakCount;
       if (hasPeakEloCol) {
         spUpdateObj.peak_elo = newPeak;

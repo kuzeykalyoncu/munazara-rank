@@ -450,7 +450,7 @@ export async function POST(req: NextRequest) {
         career_avg_speak: Math.round(newAvgSpeak * 100) / 100,
       };
       if (hasMatchCountCol) update.match_count = sp.matchCount;
-      if (hasBrCountCol) { update.br_count = isBreak ? 1 : 0; update.br_bonus_total = sp.brBonusTotal; }
+      if (hasBrCountCol) { update.br_count = sp.careerBreakCount; update.br_bonus_total = sp.brBonusTotal; }
       if (hasCareerBreakCol) update.career_break_count = sp.careerBreakCount;
       speakerUpdates.push(update);
     }
