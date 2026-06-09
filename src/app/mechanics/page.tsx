@@ -329,6 +329,10 @@ EloSonu = EloBaşlangıcı + toplam_prelim_delta + BonusTotal`}
       <Section emoji="❓" title="Sık Sorulan Sorular">
         <div className="space-y-4">
           <FaqItem
+            q="Break bonusunu kimler alır ve nasıl doğrulanır?"
+            a="Sadece turnuva sonuçlarında resmi olarak 'break' ettiği açıklanan takımların konuşmacıları +5 ELO break bonusu kazanır. Gölge (shadow) veya swing takımlar break bonusundan hariç tutulur. Break yapılan turnuvaların listesi ve toplam break sayısı konuşmacı profilinde doğrudan turnuva istatistikleri (tournament_stats) tablosundan doğrulanarak gösterilir."
+          />
+          <FaqItem
             q="Eleme (outround) turları Elo hesabına giriyor mu?"
             a="Evet, artık giriyor. SP verisi yoksa sistem SP farkı = 0 kabul ederek Gelişim/Kayıp modunu çalıştırır. Admin panelinden SP'leri manuel girebilirsin; girersen fark > 1 olursa Performans modu devreye girebilir. Pairwise mantığı çeyrek/yarı final (2 çıkan, 2 elenen) ve final (tam sıralama) formatlarına göre otomatik seçilir."
           />
