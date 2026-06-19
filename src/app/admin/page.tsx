@@ -615,18 +615,14 @@ export default function AdminPage() {
     }
   }
 
-  async function handleBulkSync(chronological: boolean = false) {
-    if (!chronological) {
-      if (!confirm(`${tournaments.length} turnuva için tüm ELO'lar yeniden hesaplanacak. Emin misiniz?`)) return;
-    }
+  async function handleBulkSync() {
+    if (!confirm(`${tournaments.length} turnuva için tüm ELO'lar kronolojik sırayla (en eski en alttakinden başlanarak) yeniden hesaplanacak. Emin misiniz?`)) return;
     
     setLoading(true);
     setSyncProgress({ current: 0, total: tournaments.length });
     
-    // Sort oldest first if doing a chronological bulk sync
-    const targetTournaments = chronological
-      ? [...tournaments].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-      : tournaments;
+    // Sort oldest first (chronological order)
+    const targetTournaments = [...tournaments].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
     let successCount = 0;
     for (let i = 0; i < targetTournaments.length; i++) {
@@ -1476,7 +1472,7 @@ export default function AdminPage() {
               <span className="text-xs opacity-60">({tournaments.filter(t => t.raw_data).length} hazır)</span>
             </button>
             <button
-              onClick={() => handleBulkSync(false)}
+              onClick={handleBulkSync}
               disabled={loading || tournaments.length === 0}
               className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
             >

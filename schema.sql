@@ -101,3 +101,17 @@ CREATE POLICY "Service can insert tournament_stats" ON tournament_stats FOR INSE
 CREATE POLICY "Service can upsert tournament_stats" ON tournament_stats FOR UPDATE USING (true);
 CREATE POLICY "Service can insert elo_history" ON elo_history FOR INSERT WITH CHECK (true);
 CREATE POLICY "Service can insert h2h_records" ON h2h_records FOR INSERT WITH CHECK (true);
+
+-- Snapshots for backup/restore
+CREATE TABLE IF NOT EXISTS elo_snapshot (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  label TEXT NOT NULL,
+  speakers_data JSONB NOT NULL,
+  elo_history_data JSONB NOT NULL,
+  tournament_stats_data JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE elo_snapshot ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read snapshots" ON elo_snapshot FOR SELECT USING (true);
+CREATE POLICY "Public insert snapshots" ON elo_snapshot FOR INSERT WITH CHECK (true);

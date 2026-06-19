@@ -247,7 +247,45 @@ export async function POST(req: NextRequest) {
     const roundLogInserts: any[] = [];
     const speakerPrelimIdx: Record<string, number> = {};
 
-    for (const room of results.rooms) {
+    function getRoomWeight(room: any): number {
+      const isOutround = room.isOutround || false;
+      const name = (room.name || "").toLowerCase();
+      
+      if (!isOutround) {
+        const numMatch = name.match(/\d+/);
+        if (numMatch) {
+          return parseInt(numMatch[0], 10);
+        }
+        return 0;
+      } else {
+        if (name.includes("ön sekiz") || name.includes("pre-octo") || name.includes("partial octo") || name.includes("partialocto")) {
+          return 100;
+        }
+        if (name.includes("octo") || name.includes("sekiz")) {
+          return 110;
+        }
+        if (name.includes("ön çeyrek") || name.includes("pre-quarter") || name.includes("partial quarter") || name.includes("partialquarter")) {
+          return 120;
+        }
+        if (name.includes("çeyrek") || name.includes("quarter")) {
+          return 130;
+        }
+        if (name.includes("ön yarı") || name.includes("pre-semi") || name.includes("partial semi") || name.includes("partialsemi")) {
+          return 140;
+        }
+        if (name.includes("yarı") || name.includes("semi")) {
+          return 150;
+        }
+        if (name.includes("final")) {
+          return 160;
+        }
+        return 200;
+      }
+    }
+
+    const sortedRooms = [...results.rooms].sort((a, b) => getRoomWeight(a) - getRoomWeight(b));
+
+    for (const room of sortedRooms) {
       const teamStates: { name: string; elo: number; speakers: SpeakerState[] }[] = [];
       for (const tName of room.placements) {
         const spNames = teamToSpeakers[tName.toLowerCase()] || [];
