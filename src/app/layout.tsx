@@ -24,11 +24,10 @@ export default function RootLayout({
     <html lang="tr" className="dark">
       <body className={`${inter.className} bg-gray-950 text-gray-100 min-h-screen`}>
         {/* Google AdSense */}
-        <Script
+        <script
           async
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6948290996459258"
           crossOrigin="anonymous"
-          strategy="afterInteractive"
         />
         {gaId && (
           <>
