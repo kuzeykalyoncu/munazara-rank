@@ -10,6 +10,9 @@ export const metadata: Metadata = {
   title: "MünazaRank | ELO Tracker",
   description:
     "Türk akademik münazara dünyasının ELO sıralama sistemi ve istatistik takip platformu.",
+  other: {
+    "google-adsense-account": "ca-pub-6948290996459258",
+  },
 };
 
 export default function RootLayout({
