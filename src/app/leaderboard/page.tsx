@@ -86,9 +86,21 @@ export default function LeaderboardPage() {
       .then((d) => { setSpeakers(d.speakers || []); setLoading(false); });
   }, []);
 
+  // Normalize Turkish characters for case-insensitive and keyboard-friendly search
+  const cleanForSearch = (str: string) => {
+    return str
+      .toLowerCase()
+      .replace(/ı/g, "i")
+      .replace(/ö/g, "o")
+      .replace(/ü/g, "u")
+      .replace(/ç/g, "c")
+      .replace(/ş/g, "s")
+      .replace(/ğ/g, "g");
+  };
+
   // Filter based on search query
   const filtered = speakers.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase())
+    cleanForSearch(s.name).includes(cleanForSearch(search))
   );
 
   // Sort according to current or peak ELO
