@@ -233,13 +233,27 @@ export default function AdminPage() {
   }
 
   async function loadUnrankedSpeakers() {
-    const { data } = await supabase
-      .from("speakers")
-      .select("*")
-      .lt("total_tournaments", 4)
-      .or("force_ranked.is.null,force_ranked.eq.false")
-      .order("elo", { ascending: false });
-    if (data) setUnrankedSpeakers(data);
+    let allUnranked: any[] = [];
+    let page = 0;
+    const pageSize = 1000;
+    while (true) {
+      const { data, error } = await supabase
+        .from("speakers")
+        .select("*")
+        .lt("total_tournaments", 4)
+        .or("force_ranked.is.null,force_ranked.eq.false")
+        .order("elo", { ascending: false })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+      if (error) {
+        console.error("Error loading unranked speakers:", error);
+        break;
+      }
+      if (!data || data.length === 0) break;
+      allUnranked = allUnranked.concat(data);
+      if (data.length < pageSize) break;
+      page++;
+    }
+    setUnrankedSpeakers(allUnranked);
   }
 
   async function handleForceRank(speakerId: string) {

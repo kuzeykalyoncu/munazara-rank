@@ -20,15 +20,39 @@ function getLevenshteinDistance(a: string, b: string): number {
   return matrix[b.length][a.length];
 }
 
+function cleanForSuggestion(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/İ/g, "i")
+    .replace(/I/g, "i")
+    .replace(/ı/g, "i")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 export async function GET() {
   try {
-    const { data: speakers, error } = await supabase
-      .from("speakers")
-      .select("name, total_tournaments")
-      .order("total_tournaments", { ascending: false }); // Sort by experience
+    let speakers: any[] = [];
+    let page = 0;
+    const pageSize = 1000;
 
-    if (error) throw new Error(error.message);
-    if (!speakers || speakers.length === 0) {
+    while (true) {
+      const { data, error } = await supabase
+        .from("speakers")
+        .select("name, total_tournaments")
+        .order("total_tournaments", { ascending: false })
+        .range(page * pageSize, (page + 1) * pageSize - 1);
+
+      if (error) throw new Error(error.message);
+      if (!data || data.length === 0) break;
+
+      speakers = speakers.concat(data);
+      if (data.length < pageSize) break;
+      page++;
+    }
+
+    if (speakers.length === 0) {
       return NextResponse.json({ clusters: [] });
     }
 
@@ -47,8 +71,8 @@ export async function GET() {
         const sp2 = speakers[j];
         if (visited.has(sp2.name)) continue;
 
-        const name1 = sp1.name.toLowerCase();
-        const name2 = sp2.name.toLowerCase();
+        const name1 = cleanForSuggestion(sp1.name);
+        const name2 = cleanForSuggestion(sp2.name);
 
         const dist = getLevenshteinDistance(name1, name2);
         const isSub = name1.includes(name2) || name2.includes(name1);
