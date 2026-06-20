@@ -136,7 +136,7 @@ export default function LeaderboardPage() {
       {/* Stats bar */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Toplam Konuşmacı", value: globalRankedSpeakers.length, icon: "🎙️" },
+          { label: "Toplam Konuşmacı", value: speakers.length, icon: "🎙️" },
           { label: sortBy === "peak" ? "En Yüksek Zirve ELO" : "En Yüksek ELO", value: maxEloDisplay, icon: "👑" },
           { label: "Ort. ELO", value: speakers.length ? Math.round(speakers.reduce((a, s) => a + (sortBy === "peak" ? (s.peak_elo ?? 1000) : s.elo), 0) / speakers.length) : "—", icon: "📊" },
         ].map((s) => (
