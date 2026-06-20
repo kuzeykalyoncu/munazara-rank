@@ -88,14 +88,14 @@ export default function LeaderboardPage() {
 
   // Normalize Turkish characters for case-insensitive and keyboard-friendly search
   const cleanForSearch = (str: string) => {
+    if (!str) return "";
     return str
-      .toLowerCase()
+      .replace(/İ/g, "i")
+      .replace(/I/g, "i")
       .replace(/ı/g, "i")
-      .replace(/ö/g, "o")
-      .replace(/ü/g, "u")
-      .replace(/ç/g, "c")
-      .replace(/ş/g, "s")
-      .replace(/ğ/g, "g");
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
   };
 
   // Filter based on search query
