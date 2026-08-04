@@ -115,3 +115,48 @@ CREATE TABLE IF NOT EXISTS elo_snapshot (
 ALTER TABLE elo_snapshot ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public read snapshots" ON elo_snapshot FOR SELECT USING (true);
 CREATE POLICY "Public insert snapshots" ON elo_snapshot FOR INSERT WITH CHECK (true);
+
+-- Speaker Aliases (Rumuzlar)
+CREATE TABLE IF NOT EXISTS speaker_aliases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_name TEXT NOT NULL UNIQUE,
+  target_name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE speaker_aliases ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read speaker_aliases" ON speaker_aliases FOR SELECT USING (true);
+CREATE POLICY "Public insert speaker_aliases" ON speaker_aliases FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public update speaker_aliases" ON speaker_aliases FOR UPDATE USING (true);
+CREATE POLICY "Public delete speaker_aliases" ON speaker_aliases FOR DELETE USING (true);
+
+-- ELO Round Log (Detaylı Raunt Logları)
+CREATE TABLE IF NOT EXISTS elo_round_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  speaker_id UUID REFERENCES speakers(id) ON DELETE CASCADE,
+  tournament_id UUID REFERENCES tournaments(id) ON DELETE CASCADE,
+  round_name TEXT,
+  is_outround BOOLEAN,
+  placement INTEGER,
+  partner_name TEXT,
+  partner_sp NUMERIC,
+  own_sp NUMERIC,
+  sp_diff NUMERIC,
+  distribution_mode TEXT,
+  team_raw_delta NUMERIC,
+  elo_change NUMERIC,
+  elo_before NUMERIC,
+  elo_after NUMERIC,
+  k_factor NUMERIC,
+  team_elo_before NUMERIC,
+  expected_score NUMERIC,
+  actual_score NUMERIC,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE elo_round_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read elo_round_log" ON elo_round_log FOR SELECT USING (true);
+CREATE POLICY "Public insert elo_round_log" ON elo_round_log FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public update elo_round_log" ON elo_round_log FOR UPDATE USING (true);
+CREATE POLICY "Public delete elo_round_log" ON elo_round_log FOR DELETE USING (true);
+

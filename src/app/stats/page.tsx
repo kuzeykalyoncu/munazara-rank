@@ -42,15 +42,22 @@ function EloBadge({ elo }: { elo: number }) {
 export default function StatsPage() {
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [peakElos, setPeakElos] = useState<any[]>([]);
+  const [speakerDist, setSpeakerDist] = useState<any[]>([]);
+  const [totalSpeakerPoints, setTotalSpeakerPoints] = useState(0);
+  const [avgSpeakerPoint, setAvgSpeakerPoint] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/leaderboard", { cache: "no-store" }).then((r) => r.json()),
-      fetch("/api/stats/peak-elo", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ peakElos: [] }))
-    ]).then(([leaderboardData, peakData]) => {
+      fetch("/api/stats/peak-elo", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ peakElos: [] })),
+      fetch("/api/stats/speaker-distribution", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ distribution: [], totalCount: 0, average: 0 }))
+    ]).then(([leaderboardData, peakData, distData]) => {
       setSpeakers(leaderboardData.speakers || []);
       setPeakElos(peakData.peakElos || []);
+      setSpeakerDist(distData.distribution || []);
+      setTotalSpeakerPoints(distData.totalCount || 0);
+      setAvgSpeakerPoint(distData.average || 0);
       setLoading(false);
     });
   }, []);
@@ -303,6 +310,78 @@ export default function StatsPage() {
           )}
         </div>
       </div>
+
+      {/* Speaker Bell Curve Chart */}
+      {speakerDist.length > 0 && (
+        <div className="glass rounded-2xl p-6 glow-emerald relative overflow-hidden mt-8">
+          <div className="absolute top-0 right-0 p-8 opacity-5">
+            <div className="text-9xl">🗣️</div>
+          </div>
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4 relative z-10">
+            <div>
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <span className="text-emerald-400">📈</span> Speaker Çan Eğrisi (Konuşmacı Puanı Dağılımı)
+              </h2>
+              <p className="text-xs text-gray-400 mt-1">
+                Tüm turnuvaların ön eleme rauntlarında verilen konuşmacı puanlarının dağılımı (Outround&apos;lar hariç)
+              </p>
+            </div>
+            <div className="flex gap-4">
+              <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-center">
+                <div className="text-xs text-gray-400">Toplam Verilen Puan</div>
+                <div className="text-lg font-bold text-emerald-400">{totalSpeakerPoints.toLocaleString('tr-TR')}</div>
+              </div>
+              <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-center">
+                <div className="text-xs text-gray-400">Ortalama Puan</div>
+                <div className="text-lg font-bold text-emerald-400">{avgSpeakerPoint}</div>
+              </div>
+            </div>
+          </div>
+          <div className="h-80 w-full relative z-10">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={speakerDist}>
+                <defs>
+                  <linearGradient id="colorSpCount" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
+                <XAxis
+                  dataKey="score"
+                  stroke="#64748b"
+                  fontSize={12}
+                  tickFormatter={(val) => `${val}`}
+                />
+                <YAxis stroke="#64748b" fontSize={12} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#0f172a",
+                    borderColor: "#334155",
+                    borderRadius: "0.5rem",
+                    color: "#f8fafc",
+                  }}
+                  itemStyle={{ color: "#a7f3d0" }}
+                  labelFormatter={(label) => `Konuşmacı Puanı: ${label}`}
+                  formatter={(value: number, name, props) => {
+                    const pct = props.payload.percentage;
+                    return [`${value} adet (${pct}%)`, "Adet"];
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#34d399"
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#colorSpCount)"
+                  activeDot={{ r: 6, fill: "#a7f3d0" }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

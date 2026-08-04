@@ -35,6 +35,9 @@
   .glow-indigo {
     box-shadow: 0 0 30px rgba(99, 102, 241, 0.15);
   }
+  .glow-emerald {
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.15);
+  }
   .text-gradient {
     @apply bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent;
   }
