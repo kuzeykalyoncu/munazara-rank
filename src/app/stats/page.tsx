@@ -355,17 +355,22 @@ export default function StatsPage() {
                 />
                 <YAxis stroke="#64748b" fontSize={12} allowDecimals={false} />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#0f172a",
-                    borderColor: "#334155",
-                    borderRadius: "0.5rem",
-                    color: "#f8fafc",
-                  }}
-                  itemStyle={{ color: "#a7f3d0" }}
-                  labelFormatter={(label) => `Konuşmacı Puanı: ${label}`}
-                  formatter={(value: number, name, props) => {
-                    const pct = props.payload.percentage;
-                    return [`${value} adet (${pct}%)`, "Adet"];
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-[#0f172a] border border-[#334155] p-3 rounded-lg text-sm text-slate-200 shadow-xl">
+                          <p className="font-bold text-white mb-1">Konuşmacı Puanı: {label}</p>
+                          <p className="text-emerald-400">Adet: <span className="font-semibold text-white">{payload[0].value}</span> ({data.percentage}%)</p>
+                          {data.latestTournament && (
+                            <p className="text-gray-400 text-xs mt-1.5 border-t border-white/10 pt-1.5">
+                              En Son: <span className="text-slate-300 font-medium">{data.latestTournament}</span>
+                            </p>
+                          )}
+                        </div>
+                      );
+                    }
+                    return null;
                   }}
                 />
                 <Area
