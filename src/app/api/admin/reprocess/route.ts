@@ -44,7 +44,40 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // CRITICAL: Yeniden hesaplamadan önce bu turnuvaya ait eski verileri temizle
+    // Aksi hâlde h2h_records ve elo_round_log çift kayıt oluşturur
+    const cleanupErrors: string[] = [];
+
+    const { error: delH2H } = await supabase
+      .from("h2h_records")
+      .delete()
+      .eq("tournament_id", tournamentId);
+    if (delH2H) cleanupErrors.push("h2h_records: " + delH2H.message);
+
+    const { error: delLog } = await supabase
+      .from("elo_round_log")
+      .delete()
+      .eq("tournament_id", tournamentId);
+    if (delLog) cleanupErrors.push("elo_round_log: " + delLog.message);
+
+    const { error: delStats } = await supabase
+      .from("tournament_stats")
+      .delete()
+      .eq("tournament_id", tournamentId);
+    if (delStats) cleanupErrors.push("tournament_stats: " + delStats.message);
+
+    const { error: delHistory } = await supabase
+      .from("elo_history")
+      .delete()
+      .eq("tournament_id", tournamentId);
+    if (delHistory) cleanupErrors.push("elo_history: " + delHistory.message);
+
+    if (cleanupErrors.length > 0) {
+      console.warn("Reprocess cleanup warnings:", cleanupErrors);
+    }
+
     // /api/admin/process endpoint'ini çağır
+
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
       || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
