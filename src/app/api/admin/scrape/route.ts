@@ -479,8 +479,10 @@ async function fetchDebateRounds(baseUrl: string) {
   const warnings: string[] = [];
   let missingCount = 0;
 
-  // Çekilecek tur listesini eşzamanlı olarak hazırla (Tur 1 den 20 ye kadar)
-  const fetchPromises = Array.from({ length: 20 }, async (_, i) => {
+  // Çekilecek tur listesini eşzamanlı olarak hazırla (Tur 1 den 30 ye kadar)
+  // NOT: Bazı turnuvalarda tur numaraları ardışık değil olabilir (örn: 1-5 prelim, 13-15 eleme).
+  // Bu yüzden 30'a kadar hepsine paralel istek atılıp sadece sonuç gelenler işlenir.
+  const fetchPromises = Array.from({ length: 30 }, async (_, i) => {
     const roundIndex = i + 1;
     try {
       const url = `${baseUrl}results/round/${roundIndex}/?view=debate`;
@@ -495,9 +497,12 @@ async function fetchDebateRounds(baseUrl: string) {
   // !! Bütün turlara aynı anda (paralel) istek atılarak indirme hızlandırılır !!
   const roundResults = await Promise.all(fetchPromises);
 
-  // Gelen yanıtları sırayla (Tur 1 den 20 ye) parse et
+  // Gelen yanıtları sırayla parse et.
+  // ÖNEMLİ: Artık peş peşe hata sayacı kullanmıyoruz — çünkü bazı turnuvalarda
+  // prelim turlar 1-5, eleme turlar ise 13-15 gibi atlayarak numaralanabiliyor.
+  // "3 üst üste 404 → dur" kuralı bu durumda eleme turlarının kaçırılmasına yol açıyordu.
+  // Şimdi HTML'i başarıyla gelen her turu işliyoruz, boşları atlıyoruz.
   for (const res of roundResults) {
-    if (missingCount >= 3) break; // Peş peşe 3 hata gelirse sonrası turları yok say
     
     const roundIndex = res.roundIndex;
     if (res.error || !res.html) {
